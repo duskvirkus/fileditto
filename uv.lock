@@ -210,10 +210,14 @@ source = { editable = "." }
 dependencies = [
     { name = "file-magic" },
     { name = "pillow" },
-    { name = "pysmb" },
     { name = "pytest" },
     { name = "python-magic" },
     { name = "ruff" },
+]
+
+[package.optional-dependencies]
+smb = [
+    { name = "pysmb" },
     { name = "smbprotocol" },
 ]
 
@@ -221,12 +225,13 @@ dependencies = [
 requires-dist = [
     { name = "file-magic", specifier = ">=0.4.1" },
     { name = "pillow", specifier = ">=10.4.0" },
-    { name = "pysmb", specifier = ">=1.2.8" },
+    { name = "pysmb", marker = "extra == 'smb'", specifier = ">=1.2.8" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "python-magic", specifier = ">=0.4.27" },
     { name = "ruff", specifier = ">=0.15.9" },
-    { name = "smbprotocol", specifier = ">=1.10.0" },
+    { name = "smbprotocol", marker = "extra == 'smb'", specifier = ">=1.10.0" },
 ]
+provides-extras = ["smb"]
 
 [[package]]
 name = "pyasn1"

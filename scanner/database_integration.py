@@ -7,7 +7,7 @@ This module integrates the file scanner with the P1 database schema.
 import os
 import hashlib
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 import sqlite3
 
@@ -102,7 +102,7 @@ class DatabaseIntegrator:
         file_uuid_value = file_uuid(file_hash)
 
         # Get current timestamp
-        now = datetime.utcnow().isoformat() + "Z"
+        now = datetime.now(timezone.utc).isoformat()
 
         try:
             conn.execute(
@@ -267,21 +267,21 @@ class DatabaseIntegrator:
                     file_type = self._get_file_type(metadata)
 
                     # Insert file record
-                    file_uuid = self._insert_file_record(
+                    inserted_uuid = self._insert_file_record(
                         conn, file_hash, file_size, file_type
                     )
-                    if not file_uuid:
+                    if not inserted_uuid:
                         print(f"Skipping {file_path} - file already exists in database")
                         continue
 
                     # Insert type-specific metadata
                     if file_type == "photo":
-                        self._insert_photo_metadata(conn, file_uuid, metadata)
+                        self._insert_photo_metadata(conn, inserted_uuid, metadata)
                     elif file_type == "video":
-                        self._insert_video_metadata(conn, file_uuid, metadata)
+                        self._insert_video_metadata(conn, inserted_uuid, metadata)
 
                     files_stored += 1
-                    print(f"Stored: {file_path} (UUID: {file_uuid})")
+                    print(f"Stored: {file_path} (UUID: {inserted_uuid})")
 
                 except (IOError, OSError) as e:
                     print(f"File system error processing {file_path}: {e}")

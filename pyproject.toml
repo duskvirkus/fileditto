@@ -6,11 +6,15 @@ authors = [{name = "pxvault", email = "dev@pxvault.com"}]
 dependencies = [
     "pillow>=10.4.0",
     "python-magic>=0.4.27",
-    "smbprotocol>=1.10.0",
-    "pysmb>=1.2.8",
     "pytest>=9.0.2",
     "file-magic>=0.4.1",
     "ruff>=0.15.9",
+]
+
+[project.optional-dependencies]
+smb = [
+    "smbprotocol>=1.10.0",
+    "pysmb>=1.2.8",
 ]
 
 [build-system]

@@ -37,24 +37,25 @@ Note:
 
 import json
 import os
+from collections import deque
 from typing import List, Dict, Optional
 
 
 class IngestionQueue:
     """Manages a queue of candidate files with extracted metadata."""
-    
+
     def __init__(self, persistent: bool = False, storage_path: Optional[str] = None):
         """
         Initialize the ingestion queue.
-        
+
         Args:
             persistent: Whether to use persistent storage
             storage_path: Path for persistent storage file
         """
         self.persistent = persistent
         self.storage_path = storage_path or 'ingestion_queue.json'
-        self.queue = []
-        
+        self.queue = deque()
+
         if self.persistent:
             self._load_queue()
             
@@ -90,7 +91,7 @@ class IngestionQueue:
         if not self.queue:
             return None
             
-        file_metadata = self.queue.pop(0)
+        file_metadata = self.queue.popleft()
         if self.persistent:
             self._save_queue()
             
@@ -115,10 +116,10 @@ class IngestionQueue:
         """Save queue to persistent storage."""
         if self.persistent:
             with open(self.storage_path, 'w') as f:
-                json.dump(self.queue, f, indent=2)
-                
+                json.dump(list(self.queue), f, indent=2)
+
     def _load_queue(self) -> None:
         """Load queue from persistent storage."""
         if self.persistent and os.path.exists(self.storage_path):
             with open(self.storage_path, 'r') as f:
-                self.queue = json.load(f)
+                self.queue = deque(json.load(f))
