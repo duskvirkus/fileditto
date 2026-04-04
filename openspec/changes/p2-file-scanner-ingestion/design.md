@@ -59,4 +59,4 @@ This design builds on P1 (database schema) to implement file scanning and ingest
 
 **Python Dependency Management:**
 - Risk: Version conflicts in media libraries
-- Mitigation: Pin specific versions in requirements.txt
+- Mitigation: Use uv for dependency management with pinned versions in pyproject.toml
