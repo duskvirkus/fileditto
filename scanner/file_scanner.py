@@ -163,32 +163,15 @@ class FileScanner:
             raise ValueError("SMB share path must start with smb://")
 
         # Remove smb:// prefix
-        path_parts = share_path[5:].split("/", 1)
+        path_parts = share_path[6:].split("/", 1)
         if len(path_parts) < 2:
             raise ValueError(
                 "Invalid SMB share path format. Expected smb://server/share"
             )
 
-        # Extract server and share name (unused in current implementation)
-        path_parts[0], path_parts[1] if len(path_parts) > 1 else ""
-
-        try:
-            # Connect to SMB server
-            # Note: This is a simplified placeholder - actual SMB implementation
-            # would require proper connection parameters and error handling
-            # For now, we'll simulate a connection failure to avoid runtime errors
-            raise RuntimeError("SMB implementation not fully completed")
-
-            discovered_files = []
-
-            # List files in the share (simplified - would need recursive implementation)
-            # For now, we'll return an empty list as a placeholder
-            # A full implementation would recursively traverse the SMB share
-
-            return discovered_files
-
-        except Exception as e:
-            raise RuntimeError(f"Failed to connect to SMB share: {e}")
+        # server = path_parts[0], share = path_parts[1]
+        # Full SMB traversal not yet implemented.
+        raise RuntimeError("SMB implementation not yet completed")
 
     def _scan_nfs_share(self, share_path: str) -> List[str]:
         """

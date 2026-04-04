@@ -45,6 +45,24 @@ from PIL import Image
 from PIL.ExifTags import TAGS
 
 
+_IMAGE_EXTENSIONS = (
+    ".jpg", ".jpeg", ".jpe", ".jfif", ".pjpeg", ".pjpg",
+    ".png", ".apng", ".gif", ".bmp", ".dib",
+    ".tiff", ".tif", ".webp", ".heif", ".heic", ".avif",
+    ".svg", ".ico", ".raw", ".cr2", ".nef", ".arw",
+    ".dng", ".orf", ".rw2", ".raf", ".sr2",
+)
+
+_VIDEO_EXTENSIONS = (
+    ".mp4", ".m4v", ".mov", ".qt", ".avi", ".wmv",
+    ".mkv", ".mk3d", ".webm", ".flv", ".f4v",
+    ".m4p", ".m4b", ".3gp", ".3g2", ".asf", ".vob",
+    ".mpg", ".mpeg", ".m2v", ".mpe", ".mpv", ".m2ts", ".ts",
+    ".ogv", ".ogg", ".rm", ".rmvb", ".divx", ".div",
+    ".xvid", ".h264", ".h265", ".av1",
+)
+
+
 class MetadataExtractor:
     """Extracts metadata from photo and video files."""
 
@@ -162,77 +180,7 @@ class MetadataExtractor:
         Returns:
             Tuple of all supported file extensions
         """
-        # Expanded list of image extensions
-        image_extensions = (
-            ".jpg",
-            ".jpeg",
-            ".jpe",
-            ".jfif",
-            ".pjpeg",
-            ".pjpg",
-            ".png",
-            ".apng",
-            ".gif",
-            ".bmp",
-            ".dib",
-            ".tiff",
-            ".tif",
-            ".webp",
-            ".heif",
-            ".heic",
-            ".avif",
-            ".svg",
-            ".ico",
-            ".raw",
-            ".cr2",
-            ".nef",
-            ".arw",
-            ".dng",
-            ".orf",
-            ".rw2",
-            ".raf",
-            ".sr2",
-        )
-
-        # Expanded list of video extensions
-        video_extensions = (
-            ".mp4",
-            ".m4v",
-            ".mov",
-            ".qt",
-            ".avi",
-            ".wmv",
-            ".mkv",
-            ".mk3d",
-            ".webm",
-            ".flv",
-            ".f4v",
-            ".m4p",
-            ".m4b",
-            ".3gp",
-            ".3g2",
-            ".asf",
-            ".vob",
-            ".mpg",
-            ".mpeg",
-            ".m2v",
-            ".mpe",
-            ".mpv",
-            ".m2ts",
-            ".ts",
-            ".ogv",
-            ".ogg",
-            ".rm",
-            ".rmvb",
-            ".divx",
-            ".div",
-            ".xvid",
-            ".h264",
-            ".h265",
-            ".av1",
-        )
-
-        return image_extensions + video_extensions
+        return _IMAGE_EXTENSIONS + _VIDEO_EXTENSIONS
 
     def extract_metadata(self, file_path: str) -> Optional[Dict]:
         """
@@ -245,79 +193,10 @@ class MetadataExtractor:
             Dictionary containing extracted metadata, or None if extraction fails
         """
         try:
-            # Get supported extensions
-            image_extensions = (
-                ".jpg",
-                ".jpeg",
-                ".jpe",
-                ".jfif",
-                ".pjpeg",
-                ".pjpg",
-                ".png",
-                ".apng",
-                ".gif",
-                ".bmp",
-                ".dib",
-                ".tiff",
-                ".tif",
-                ".webp",
-                ".heif",
-                ".heic",
-                ".avif",
-                ".svg",
-                ".ico",
-                ".raw",
-                ".cr2",
-                ".nef",
-                ".arw",
-                ".dng",
-                ".orf",
-                ".rw2",
-                ".raf",
-                ".sr2",
-            )
-
-            # Expanded list of video extensions
-            video_extensions = (
-                ".mp4",
-                ".m4v",
-                ".mov",
-                ".qt",
-                ".avi",
-                ".wmv",
-                ".mkv",
-                ".mk3d",
-                ".webm",
-                ".flv",
-                ".f4v",
-                ".m4p",
-                ".m4b",
-                ".3gp",
-                ".3g2",
-                ".asf",
-                ".vob",
-                ".mpg",
-                ".mpeg",
-                ".m2v",
-                ".mpe",
-                ".mpv",
-                ".m2ts",
-                ".ts",
-                ".ogv",
-                ".ogg",
-                ".rm",
-                ".rmvb",
-                ".divx",
-                ".div",
-                ".xvid",
-                ".h264",
-                ".h265",
-                ".av1",
-            )
-
-            if file_path.lower().endswith(image_extensions):
+            lower = file_path.lower()
+            if lower.endswith(_IMAGE_EXTENSIONS):
                 return self.extract_image_metadata(file_path)
-            elif file_path.lower().endswith(video_extensions):
+            elif lower.endswith(_VIDEO_EXTENSIONS):
                 return self.extract_video_metadata(file_path)
             else:
                 return None
