@@ -1,9 +1,8 @@
 import sqlite3
+from db.uuid_util import NAMESPACE_UUID
 
 # This must match schema_version after all migrations have been applied.
 EXPECTED_SCHEMA_VERSION = 1
-
-from db.uuid_util import NAMESPACE_UUID
 
 
 def open_db(path: str) -> sqlite3.Connection:
