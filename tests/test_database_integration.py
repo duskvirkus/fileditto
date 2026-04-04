@@ -4,8 +4,6 @@ Test database integration functionality.
 
 import os
 import tempfile
-import sqlite3
-import pytest
 from scanner.database_integration import DatabaseIntegrator
 
 
