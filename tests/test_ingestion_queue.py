@@ -4,7 +4,6 @@ Test ingestion queue functionality.
 
 import os
 import tempfile
-import pytest
 from scanner.ingestion_queue import IngestionQueue
 
 
