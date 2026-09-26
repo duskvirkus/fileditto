@@ -106,21 +106,18 @@ CREATE TABLE Locations (
 );
 
 -- Devices: known source devices that can contribute files to the ingestion queue.
--- id=0 is reserved for the local device and is always present.
 CREATE TABLE Devices (
     id          INTEGER PRIMARY KEY,
-    name        TEXT    NOT NULL,
+    name        TEXT    NOT NULL UNIQUE,
     created_at  TEXT    NOT NULL,
     updated_at  TEXT    NOT NULL
 );
-INSERT INTO Devices (id, name, created_at, updated_at)
-    VALUES (0, 'local', '2000-01-01T00:00:00Z', '2000-01-01T00:00:00Z');
 
 -- IngestionQueue: holds file paths discovered during scanning, pending ingestion.
 CREATE TABLE IngestionQueue (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     file_path     TEXT    NOT NULL,
-    device_id     INTEGER NOT NULL DEFAULT 0 REFERENCES Devices(id),
+    device_id     INTEGER NOT NULL REFERENCES Devices(id),
     status        TEXT    NOT NULL DEFAULT 'pending'
                           CHECK(status IN ('pending', 'processing', 'done', 'failed', 'unsupported')),
     attempt_count INTEGER,

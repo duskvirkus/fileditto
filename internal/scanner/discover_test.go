@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/duskvirkus/pxvault/internal/db"
+	"github.com/duskvirkus/pxvault/internal/ingestion"
 	"github.com/duskvirkus/pxvault/internal/scanner"
 )
 
@@ -24,8 +25,18 @@ func openTestDB(t *testing.T) *sql.DB {
 	return conn
 }
 
+func testDeviceID(t *testing.T, conn *sql.DB) int64 {
+	t.Helper()
+	id, err := ingestion.EnsureLocalDevice(conn)
+	if err != nil {
+		t.Fatalf("EnsureLocalDevice: %v", err)
+	}
+	return id
+}
+
 func TestDiscover_EnqueuesAllFiles(t *testing.T) {
 	conn := openTestDB(t)
+	devID := testDeviceID(t, conn)
 	dir := t.TempDir()
 
 	paths := []string{
@@ -40,7 +51,7 @@ func TestDiscover_EnqueuesAllFiles(t *testing.T) {
 		os.WriteFile(full, []byte("data"), 0644)
 	}
 
-	if err := scanner.Discover(conn, dir); err != nil {
+	if err := scanner.Discover(conn, dir, devID); err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
 
@@ -53,10 +64,11 @@ func TestDiscover_EnqueuesAllFiles(t *testing.T) {
 
 func TestDiscover_AllEntriesArePending(t *testing.T) {
 	conn := openTestDB(t)
+	devID := testDeviceID(t, conn)
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "file.txt"), []byte("data"), 0644)
 
-	scanner.Discover(conn, dir)
+	scanner.Discover(conn, dir, devID)
 
 	var status string
 	conn.QueryRow(`SELECT status FROM IngestionQueue`).Scan(&status)
@@ -67,11 +79,12 @@ func TestDiscover_AllEntriesArePending(t *testing.T) {
 
 func TestDiscover_SkipsDirectories(t *testing.T) {
 	conn := openTestDB(t)
+	devID := testDeviceID(t, conn)
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, "subdir"), 0755)
 	os.WriteFile(filepath.Join(dir, "file.txt"), []byte("data"), 0644)
 
-	scanner.Discover(conn, dir)
+	scanner.Discover(conn, dir, devID)
 
 	var count int
 	conn.QueryRow(`SELECT COUNT(*) FROM IngestionQueue`).Scan(&count)
@@ -82,7 +95,8 @@ func TestDiscover_SkipsDirectories(t *testing.T) {
 
 func TestDiscover_ReturnsErrorForNonexistentPath(t *testing.T) {
 	conn := openTestDB(t)
-	err := scanner.Discover(conn, "/nonexistent/path/that/does/not/exist")
+	devID := testDeviceID(t, conn)
+	err := scanner.Discover(conn, "/nonexistent/path/that/does/not/exist", devID)
 	if err == nil {
 		t.Error("expected error for nonexistent path, got nil")
 	}

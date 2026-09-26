@@ -31,12 +31,12 @@ type QueueEntry struct {
 }
 
 // Enqueue adds a file path to the ingestion queue with status=pending.
-func Enqueue(db *sql.DB, filePath string) error {
+func Enqueue(db *sql.DB, filePath string, deviceID int64) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := db.Exec(
-		`INSERT OR IGNORE INTO IngestionQueue (file_path, status, created_at, updated_at)
-		 VALUES (?, 'pending', ?, ?)`,
-		filePath, now, now,
+		`INSERT OR IGNORE INTO IngestionQueue (file_path, device_id, status, created_at, updated_at)
+		 VALUES (?, ?, 'pending', ?, ?)`,
+		filePath, deviceID, now, now,
 	)
 	if err != nil {
 		return fmt.Errorf("enqueue %s: %w", filePath, err)

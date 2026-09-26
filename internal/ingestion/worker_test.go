@@ -51,12 +51,13 @@ func TestProcessNext_ReturnsFalseWhenQueueEmpty(t *testing.T) {
 
 func TestProcessNext_PhotoFileWrittenToFilesAndPhoto(t *testing.T) {
 	conn := openTestDB(t)
+	devID := testDeviceID(t, conn)
 	mediaID := testMediaID(t, conn)
 
 	imgPath := filepath.Join(t.TempDir(), "test.png")
 	writePNG(t, imgPath)
 
-	ingestion.Enqueue(conn, imgPath)
+	ingestion.Enqueue(conn, imgPath, devID)
 
 	processed, err := ingestion.ProcessNext(conn, mediaID)
 	if err != nil {
@@ -93,12 +94,13 @@ func TestProcessNext_PhotoFileWrittenToFilesAndPhoto(t *testing.T) {
 
 func TestProcessNext_UnsupportedFileSetToUnsupported(t *testing.T) {
 	conn := openTestDB(t)
+	devID := testDeviceID(t, conn)
 	mediaID := testMediaID(t, conn)
 
 	txtPath := filepath.Join(t.TempDir(), "notes.txt")
 	os.WriteFile(txtPath, []byte("hello"), 0644)
 
-	ingestion.Enqueue(conn, txtPath)
+	ingestion.Enqueue(conn, txtPath, devID)
 	ingestion.ProcessNext(conn, mediaID)
 
 	var status string
@@ -116,16 +118,17 @@ func TestProcessNext_UnsupportedFileSetToUnsupported(t *testing.T) {
 
 func TestProcessNext_DuplicateFileNotReinserted(t *testing.T) {
 	conn := openTestDB(t)
+	devID := testDeviceID(t, conn)
 	mediaID := testMediaID(t, conn)
 
 	imgPath := filepath.Join(t.TempDir(), "test.png")
 	writePNG(t, imgPath)
 
-	ingestion.Enqueue(conn, imgPath)
+	ingestion.Enqueue(conn, imgPath, devID)
 	ingestion.ProcessNext(conn, mediaID)
 
 	// Second enqueue of the same path is a no-op due to UNIQUE(file_path, device_id).
-	ingestion.Enqueue(conn, imgPath)
+	ingestion.Enqueue(conn, imgPath, devID)
 	ingestion.ProcessNext(conn, mediaID)
 
 	var fileCount int

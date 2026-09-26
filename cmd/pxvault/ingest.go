@@ -49,13 +49,18 @@ func runIngest(cmd *cobra.Command, args []string) error {
 		fmt.Printf("recovered %d stuck queue entries\n", recovered)
 	}
 
+	deviceID, err := ingestion.EnsureLocalDevice(conn)
+	if err != nil {
+		return fmt.Errorf("ensure local device: %w", err)
+	}
+
 	mediaID, err := ingestion.EnsureDriveForPath(conn, root)
 	if err != nil {
 		return fmt.Errorf("ensure local drive: %w", err)
 	}
 
 	fmt.Printf("scanning %s\n", root)
-	if err := scanner.Discover(conn, root); err != nil {
+	if err := scanner.Discover(conn, root, deviceID); err != nil {
 		return fmt.Errorf("scan: %w", err)
 	}
 
