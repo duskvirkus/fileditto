@@ -236,3 +236,31 @@ func TestMigrationRunner_ChecksumMismatchHaltsRunner(t *testing.T) {
 		t.Error("expected RunMigrations to return an error on checksum mismatch, but it succeeded")
 	}
 }
+
+// --- ingestion_queue table ---
+
+func TestIngestionQueue_TableExists(t *testing.T) {
+	conn := openTestDB(t)
+
+	_, err := conn.Exec(
+		`INSERT INTO ingestion_queue (file_path, status, created_at, updated_at)
+		 VALUES (?, 'pending', ?, ?)`,
+		"/some/file.jpg", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z",
+	)
+	if err != nil {
+		t.Fatalf("expected ingestion_queue to exist and accept insert, got: %v", err)
+	}
+}
+
+func TestIngestionQueue_InvalidStatusRejected(t *testing.T) {
+	conn := openTestDB(t)
+
+	_, err := conn.Exec(
+		`INSERT INTO ingestion_queue (file_path, status, created_at, updated_at)
+		 VALUES (?, 'unknown', ?, ?)`,
+		"/some/file.jpg", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z",
+	)
+	if err == nil {
+		t.Error("expected CHECK constraint violation for invalid status, but insert succeeded")
+	}
+}
