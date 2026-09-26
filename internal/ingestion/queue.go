@@ -16,6 +16,10 @@ const (
 	StatusUnsupported Status = "unsupported"
 )
 
+// MaxAttempts is the number of times a failing entry will be retried before
+// it is left in the failed state permanently.
+const MaxAttempts = 3
+
 type QueueEntry struct {
 	ID           int64
 	FilePath     string
@@ -52,7 +56,11 @@ func DequeueNext(db *sql.DB) (*QueueEntry, error) {
 	var entry QueueEntry
 	err = tx.QueryRow(
 		`SELECT id, file_path, status, attempt_count, error, created_at, updated_at
-		 FROM ingestion_queue WHERE status = 'pending' ORDER BY id LIMIT 1`,
+		 FROM ingestion_queue
+		 WHERE status = 'pending'
+		    OR (status = 'failed' AND COALESCE(attempt_count, 0) < ?)
+		 ORDER BY id LIMIT 1`,
+		MaxAttempts,
 	).Scan(
 		&entry.ID, &entry.FilePath, &entry.Status,
 		&entry.AttemptCount, &entry.Error,
