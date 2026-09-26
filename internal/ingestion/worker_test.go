@@ -1,0 +1,123 @@
+package ingestion_test
+
+import (
+	"bytes"
+	"image"
+	"image/color"
+	"image/png"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/duskvirkus/pxvault/internal/ingestion"
+)
+
+// writePNG creates a minimal valid 1x1 PNG at path.
+func writePNG(t *testing.T, path string) {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 1, 1))
+	img.Set(0, 0, color.White)
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatalf("encode PNG: %v", err)
+	}
+	if err := os.WriteFile(path, buf.Bytes(), 0644); err != nil {
+		t.Fatalf("write PNG: %v", err)
+	}
+}
+
+func TestProcessNext_ReturnsFalseWhenQueueEmpty(t *testing.T) {
+	conn := openTestDB(t)
+	processed, err := ingestion.ProcessNext(conn)
+	if err != nil {
+		t.Fatalf("ProcessNext: %v", err)
+	}
+	if processed {
+		t.Error("expected false (empty queue), got true")
+	}
+}
+
+func TestProcessNext_PhotoFileWrittenToFilesAndPhoto(t *testing.T) {
+	conn := openTestDB(t)
+
+	imgPath := filepath.Join(t.TempDir(), "test.png")
+	writePNG(t, imgPath)
+
+	ingestion.Enqueue(conn, imgPath)
+
+	processed, err := ingestion.ProcessNext(conn)
+	if err != nil {
+		t.Fatalf("ProcessNext: %v", err)
+	}
+	if !processed {
+		t.Fatal("expected processed=true")
+	}
+
+	var fileCount int
+	conn.QueryRow(`SELECT COUNT(*) FROM Files WHERE file_type = 'photo'`).Scan(&fileCount)
+	if fileCount != 1 {
+		t.Errorf("expected 1 Files row with file_type=photo, got %d", fileCount)
+	}
+
+	var photoCount int
+	conn.QueryRow(`SELECT COUNT(*) FROM Photo`).Scan(&photoCount)
+	if photoCount != 1 {
+		t.Errorf("expected 1 Photo row, got %d", photoCount)
+	}
+
+	var status string
+	conn.QueryRow(`SELECT status FROM ingestion_queue WHERE file_path = ?`, imgPath).Scan(&status)
+	if status != "done" {
+		t.Errorf("expected queue status=done, got %q", status)
+	}
+}
+
+func TestProcessNext_UnsupportedFileSetToUnsupported(t *testing.T) {
+	conn := openTestDB(t)
+
+	txtPath := filepath.Join(t.TempDir(), "notes.txt")
+	os.WriteFile(txtPath, []byte("hello"), 0644)
+
+	ingestion.Enqueue(conn, txtPath)
+	ingestion.ProcessNext(conn)
+
+	var status string
+	conn.QueryRow(`SELECT status FROM ingestion_queue WHERE file_path = ?`, txtPath).Scan(&status)
+	if status != "unsupported" {
+		t.Errorf("expected status=unsupported, got %q", status)
+	}
+
+	var fileCount int
+	conn.QueryRow(`SELECT COUNT(*) FROM Files`).Scan(&fileCount)
+	if fileCount != 0 {
+		t.Errorf("expected no Files rows for unsupported file, got %d", fileCount)
+	}
+}
+
+func TestProcessNext_DuplicateFileNotReinserted(t *testing.T) {
+	conn := openTestDB(t)
+
+	imgPath := filepath.Join(t.TempDir(), "test.png")
+	writePNG(t, imgPath)
+
+	ingestion.Enqueue(conn, imgPath)
+	ingestion.ProcessNext(conn)
+
+	// Enqueue the same file again
+	ingestion.Enqueue(conn, imgPath)
+	ingestion.ProcessNext(conn)
+
+	var fileCount int
+	conn.QueryRow(`SELECT COUNT(*) FROM Files`).Scan(&fileCount)
+	if fileCount != 1 {
+		t.Errorf("expected 1 Files row (dedup), got %d", fileCount)
+	}
+
+	var doneCount int
+	conn.QueryRow(
+		`SELECT COUNT(*) FROM ingestion_queue WHERE status = 'done'`,
+	).Scan(&doneCount)
+	if doneCount != 2 {
+		t.Errorf("expected both queue entries to be done, got %d done", doneCount)
+	}
+}
