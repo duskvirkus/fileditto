@@ -30,7 +30,7 @@ func writePNG(t *testing.T, path string) {
 func testMediaID(t *testing.T, conn *sql.DB) string {
 	t.Helper()
 	// Use a temp dir that exists on the local filesystem so ghw can detect the disk.
-	mediaID, err := ingestion.EnsureDriveForPath(conn, t.TempDir())
+	mediaID, err := ingestion.EnsureDriveForPath(conn, t.TempDir(), testDeviceID(t, conn))
 	if err != nil {
 		t.Fatalf("EnsureDriveForPath: %v", err)
 	}

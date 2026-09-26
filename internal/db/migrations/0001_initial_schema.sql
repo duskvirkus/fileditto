@@ -63,11 +63,12 @@ CREATE TABLE PhysicalLocations (
 
 -- Media: tracks physical storage media. BlurayMedia and DriveMedia share this PK.
 CREATE TABLE Media (
-    id                   TEXT NOT NULL PRIMARY KEY,
-    media_type           TEXT NOT NULL CHECK(media_type IN ('bluray', 'drive')),
+    id                   TEXT    NOT NULL PRIMARY KEY,
+    media_type           TEXT    NOT NULL CHECK(media_type IN ('bluray', 'drive')),
     label                TEXT,
-    status               TEXT NOT NULL CHECK(status IN ('connected', 'disconnected', 'lost', 'damaged')),
-    physical_location_id TEXT REFERENCES PhysicalLocations(id),
+    status               TEXT    NOT NULL CHECK(status IN ('connected', 'disconnected', 'lost', 'damaged')),
+    device_id            INTEGER REFERENCES Devices(id),  -- set when the media is connected to a device
+    physical_location_id TEXT    REFERENCES PhysicalLocations(id),
     created_at           TEXT,         -- ISO-8601 UTC
     updated_at           TEXT          -- ISO-8601 UTC
 );

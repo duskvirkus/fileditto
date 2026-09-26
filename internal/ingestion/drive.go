@@ -25,8 +25,9 @@ type diskInfo struct {
 
 // EnsureDriveForPath returns the Media ID for the physical drive that contains
 // the given path, creating Media + DriveMedia records if they don't exist.
-// On each call the drive status is updated to 'connected'.
-func EnsureDriveForPath(sqlDB *sql.DB, path string) (string, error) {
+// On each call the drive status and device_id are updated to reflect the
+// current connection.
+func EnsureDriveForPath(sqlDB *sql.DB, path string, deviceID int64) (string, error) {
 	info, err := detectDiskForPath(path)
 	if err != nil {
 		return "", fmt.Errorf("detect disk: %w", err)
@@ -43,8 +44,8 @@ func EnsureDriveForPath(sqlDB *sql.DB, path string) (string, error) {
 	err = sqlDB.QueryRow(`SELECT id FROM Media WHERE id = ?`, mediaID).Scan(&existing)
 	if err == nil {
 		if _, err := sqlDB.Exec(
-			`UPDATE Media SET status = 'connected', updated_at = ? WHERE id = ?`,
-			now, mediaID,
+			`UPDATE Media SET status = 'connected', device_id = ?, updated_at = ? WHERE id = ?`,
+			deviceID, now, mediaID,
 		); err != nil {
 			return "", fmt.Errorf("update drive status: %w", err)
 		}
@@ -67,9 +68,9 @@ func EnsureDriveForPath(sqlDB *sql.DB, path string) (string, error) {
 	defer tx.Rollback() //nolint:errcheck
 
 	if _, err := tx.Exec(
-		`INSERT INTO Media (id, media_type, label, status, created_at, updated_at)
-		 VALUES (?, 'drive', ?, 'connected', ?, ?)`,
-		mediaID, label, now, now,
+		`INSERT INTO Media (id, media_type, label, status, device_id, created_at, updated_at)
+		 VALUES (?, 'drive', ?, 'connected', ?, ?, ?)`,
+		mediaID, label, deviceID, now, now,
 	); err != nil {
 		return "", fmt.Errorf("insert Media: %w", err)
 	}

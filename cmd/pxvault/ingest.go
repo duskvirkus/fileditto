@@ -54,7 +54,7 @@ func runIngest(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("ensure local device: %w", err)
 	}
 
-	mediaID, err := ingestion.EnsureDriveForPath(conn, root)
+	mediaID, err := ingestion.EnsureDriveForPath(conn, root, deviceID)
 	if err != nil {
 		return fmt.Errorf("ensure local drive: %w", err)
 	}
