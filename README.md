@@ -7,6 +7,7 @@ Designed to handle any file type, with initial focus on photos and videos.
 ## Requirements
 
 - Go 1.26+
+- `ffprobe` (part of [ffmpeg](https://ffmpeg.org/)) — used for video metadata extraction
 
 ## Quick start
 
