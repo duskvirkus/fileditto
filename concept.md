@@ -1,6 +1,6 @@
 ## Project concept
 
-This is the photo, video, and artwork backup system I always wanted to make but never had the time to do so. The high level overview is as a 3-2-1 backup system that categorizes everything backed-up in an sql database to track where it exists and metadata, this is also backed up.
+This is the file backup system I always wanted to make but never had the time to do so. The high level overview is as a 3-2-1 backup system that categorizes everything backed-up in an sql database to track where it exists and metadata, this is also backed up.
 
 The place this is different from many other 3-2-1 backup software I've seen is that the 3-2-1 can be different for each file. Additionally we use a combination of timestamp, image/video hash, and metadata to identify duplicated files and they get marked in the database as having an additional location but don't get saved as a new entry in the database.
 

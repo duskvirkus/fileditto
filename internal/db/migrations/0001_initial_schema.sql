@@ -1,5 +1,5 @@
 -- Migration 0001: Initial schema
--- Creates all core tables for the pxvault database.
+-- Creates all core tables for the fileditto database.
 
 -- schema_version: single-row table identifying the current schema version.
 CREATE TABLE schema_version (

@@ -5,12 +5,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/duskvirkus/pxvault/internal/config"
+	"github.com/duskvirkus/fileditto/internal/config"
 )
 
 var dbCmd = &cobra.Command{
 	Use:   "db",
-	Short: "Manage the pxvault database configuration",
+	Short: "Manage the fileditto database configuration",
 }
 
 func init() {

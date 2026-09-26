@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/duskvirkus/pxvault/internal/db"
-	"github.com/duskvirkus/pxvault/internal/ingestion"
-	"github.com/duskvirkus/pxvault/internal/scanner"
+	"github.com/duskvirkus/fileditto/internal/db"
+	"github.com/duskvirkus/fileditto/internal/ingestion"
+	"github.com/duskvirkus/fileditto/internal/scanner"
 )
 
 func openTestDB(t *testing.T) *sql.DB {
