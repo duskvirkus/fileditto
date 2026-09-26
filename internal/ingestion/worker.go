@@ -76,7 +76,7 @@ func processEntry(sqlDB *sql.DB, entry *QueueEntry) error {
 
 	meta, err := extractMetadata(entry.FilePath, fileType)
 	if err != nil {
-		meta = map[string]interface{}{}
+		return fmt.Errorf("extract metadata: %w", err)
 	}
 
 	if err := writeFile(sqlDB, fileUUID.String(), sha, size, fileType, meta); err != nil {
