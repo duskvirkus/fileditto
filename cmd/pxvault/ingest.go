@@ -49,7 +49,7 @@ func runIngest(cmd *cobra.Command, args []string) error {
 		fmt.Printf("recovered %d stuck queue entries\n", recovered)
 	}
 
-	mediaID, err := ingestion.EnsureLocalDrive(conn)
+	mediaID, err := ingestion.EnsureDriveForPath(conn, root)
 	if err != nil {
 		return fmt.Errorf("ensure local drive: %w", err)
 	}
