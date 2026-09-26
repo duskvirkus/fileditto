@@ -116,6 +116,50 @@ func TestSetStatus_FailedIncrementsAttemptCount(t *testing.T) {
 	}
 }
 
+func TestDequeueNext_RetriesFailedEntryBelowMaxAttempts(t *testing.T) {
+	conn := openTestDB(t)
+	ingestion.Enqueue(conn, "/some/file.jpg")
+	entry, _ := ingestion.DequeueNext(conn)
+
+	errMsg := "transient error"
+	ingestion.SetStatus(conn, entry.ID, ingestion.StatusFailed, &errMsg)
+
+	// Entry has attempt_count=1, below MaxAttempts — should be dequeued again.
+	retry, err := ingestion.DequeueNext(conn)
+	if err != nil {
+		t.Fatalf("DequeueNext on retry: %v", err)
+	}
+	if retry == nil {
+		t.Fatal("expected entry to be retried, got nil")
+	}
+	if retry.ID != entry.ID {
+		t.Errorf("expected same entry id %d, got %d", entry.ID, retry.ID)
+	}
+}
+
+func TestDequeueNext_DoesNotRetryExhaustedEntry(t *testing.T) {
+	conn := openTestDB(t)
+	ingestion.Enqueue(conn, "/some/file.jpg")
+
+	errMsg := "persistent error"
+	for range ingestion.MaxAttempts {
+		entry, _ := ingestion.DequeueNext(conn)
+		if entry == nil {
+			t.Fatal("expected entry during retry loop, got nil")
+		}
+		ingestion.SetStatus(conn, entry.ID, ingestion.StatusFailed, &errMsg)
+	}
+
+	// attempt_count == MaxAttempts — should not be dequeued again.
+	entry, err := ingestion.DequeueNext(conn)
+	if err != nil {
+		t.Fatalf("DequeueNext after exhaustion: %v", err)
+	}
+	if entry != nil {
+		t.Errorf("expected nil after max attempts, got entry %+v", entry)
+	}
+}
+
 func TestPendingCount(t *testing.T) {
 	conn := openTestDB(t)
 	ingestion.Enqueue(conn, "/file1.jpg")
