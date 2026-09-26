@@ -30,7 +30,7 @@ func TestEnqueue_CreatesPendingEntry(t *testing.T) {
 	}
 	var status string
 	if err := conn.QueryRow(
-		`SELECT status FROM ingestion_queue WHERE file_path = ?`, "/some/file.jpg",
+		`SELECT status FROM IngestionQueue WHERE file_path = ?`, "/some/file.jpg",
 	).Scan(&status); err != nil {
 		t.Fatalf("query: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestDequeueNext_MarksEntryAsProcessing(t *testing.T) {
 	}
 
 	var dbStatus string
-	conn.QueryRow(`SELECT status FROM ingestion_queue WHERE id = ?`, entry.ID).Scan(&dbStatus)
+	conn.QueryRow(`SELECT status FROM IngestionQueue WHERE id = ?`, entry.ID).Scan(&dbStatus)
 	if dbStatus != "processing" {
 		t.Errorf("expected DB status=processing, got %q", dbStatus)
 	}
@@ -83,7 +83,7 @@ func TestSetStatus_Done(t *testing.T) {
 		t.Fatalf("SetStatus: %v", err)
 	}
 	var status string
-	conn.QueryRow(`SELECT status FROM ingestion_queue WHERE id = ?`, entry.ID).Scan(&status)
+	conn.QueryRow(`SELECT status FROM IngestionQueue WHERE id = ?`, entry.ID).Scan(&status)
 	if status != "done" {
 		t.Errorf("expected status=done, got %q", status)
 	}
@@ -102,7 +102,7 @@ func TestSetStatus_FailedIncrementsAttemptCount(t *testing.T) {
 	var status, errCol string
 	var attempts *int
 	conn.QueryRow(
-		`SELECT status, error, attempt_count FROM ingestion_queue WHERE id = ?`, entry.ID,
+		`SELECT status, error, attempt_count FROM IngestionQueue WHERE id = ?`, entry.ID,
 	).Scan(&status, &errCol, &attempts)
 
 	if status != "failed" {

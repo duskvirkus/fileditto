@@ -237,18 +237,18 @@ func TestMigrationRunner_ChecksumMismatchHaltsRunner(t *testing.T) {
 	}
 }
 
-// --- ingestion_queue table ---
+// --- IngestionQueue table ---
 
 func TestIngestionQueue_TableExists(t *testing.T) {
 	conn := openTestDB(t)
 
 	_, err := conn.Exec(
-		`INSERT INTO ingestion_queue (file_path, status, created_at, updated_at)
+		`INSERT INTO IngestionQueue (file_path, status, created_at, updated_at)
 		 VALUES (?, 'pending', ?, ?)`,
 		"/some/file.jpg", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z",
 	)
 	if err != nil {
-		t.Fatalf("expected ingestion_queue to exist and accept insert, got: %v", err)
+		t.Fatalf("expected IngestionQueue to exist and accept insert, got: %v", err)
 	}
 }
 
@@ -256,7 +256,7 @@ func TestIngestionQueue_InvalidStatusRejected(t *testing.T) {
 	conn := openTestDB(t)
 
 	_, err := conn.Exec(
-		`INSERT INTO ingestion_queue (file_path, status, created_at, updated_at)
+		`INSERT INTO IngestionQueue (file_path, status, created_at, updated_at)
 		 VALUES (?, 'unknown', ?, ?)`,
 		"/some/file.jpg", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z",
 	)
@@ -265,14 +265,14 @@ func TestIngestionQueue_InvalidStatusRejected(t *testing.T) {
 	}
 }
 
-// --- devices table ---
+// --- Devices table ---
 
 func TestDevices_LocalDeviceSeeded(t *testing.T) {
 	conn := openTestDB(t)
 
 	var id int
 	var name string
-	if err := conn.QueryRow(`SELECT id, name FROM devices WHERE id = 0`).Scan(&id, &name); err != nil {
+	if err := conn.QueryRow(`SELECT id, name FROM Devices WHERE id = 0`).Scan(&id, &name); err != nil {
 		t.Fatalf("expected device id=0 to exist, got: %v", err)
 	}
 	if name != "local" {
@@ -284,13 +284,13 @@ func TestIngestionQueue_DefaultDeviceIsLocal(t *testing.T) {
 	conn := openTestDB(t)
 
 	conn.Exec(
-		`INSERT INTO ingestion_queue (file_path, status, created_at, updated_at)
+		`INSERT INTO IngestionQueue (file_path, status, created_at, updated_at)
 		 VALUES (?, 'pending', ?, ?)`,
 		"/some/file.jpg", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z",
 	)
 
 	var deviceID int
-	conn.QueryRow(`SELECT device_id FROM ingestion_queue WHERE file_path = ?`, "/some/file.jpg").Scan(&deviceID)
+	conn.QueryRow(`SELECT device_id FROM IngestionQueue WHERE file_path = ?`, "/some/file.jpg").Scan(&deviceID)
 	if deviceID != 0 {
 		t.Errorf("expected device_id=0 (local), got %d", deviceID)
 	}
@@ -300,7 +300,7 @@ func TestIngestionQueue_InvalidDeviceRejected(t *testing.T) {
 	conn := openTestDB(t)
 
 	_, err := conn.Exec(
-		`INSERT INTO ingestion_queue (file_path, device_id, status, created_at, updated_at)
+		`INSERT INTO IngestionQueue (file_path, device_id, status, created_at, updated_at)
 		 VALUES (?, 999, 'pending', ?, ?)`,
 		"/some/file.jpg", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z",
 	)

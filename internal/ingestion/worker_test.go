@@ -85,7 +85,7 @@ func TestProcessNext_PhotoFileWrittenToFilesAndPhoto(t *testing.T) {
 	}
 
 	var status string
-	conn.QueryRow(`SELECT status FROM ingestion_queue WHERE file_path = ?`, imgPath).Scan(&status)
+	conn.QueryRow(`SELECT status FROM IngestionQueue WHERE file_path = ?`, imgPath).Scan(&status)
 	if status != "done" {
 		t.Errorf("expected queue status=done, got %q", status)
 	}
@@ -102,7 +102,7 @@ func TestProcessNext_UnsupportedFileSetToUnsupported(t *testing.T) {
 	ingestion.ProcessNext(conn, mediaID)
 
 	var status string
-	conn.QueryRow(`SELECT status FROM ingestion_queue WHERE file_path = ?`, txtPath).Scan(&status)
+	conn.QueryRow(`SELECT status FROM IngestionQueue WHERE file_path = ?`, txtPath).Scan(&status)
 	if status != "unsupported" {
 		t.Errorf("expected status=unsupported, got %q", status)
 	}
@@ -135,14 +135,14 @@ func TestProcessNext_DuplicateFileNotReinserted(t *testing.T) {
 	}
 
 	var queueCount int
-	conn.QueryRow(`SELECT COUNT(*) FROM ingestion_queue`).Scan(&queueCount)
+	conn.QueryRow(`SELECT COUNT(*) FROM IngestionQueue`).Scan(&queueCount)
 	if queueCount != 1 {
 		t.Errorf("expected 1 queue entry (duplicate path ignored), got %d", queueCount)
 	}
 
 	var doneCount int
 	conn.QueryRow(
-		`SELECT COUNT(*) FROM ingestion_queue WHERE status = 'done'`,
+		`SELECT COUNT(*) FROM IngestionQueue WHERE status = 'done'`,
 	).Scan(&doneCount)
 	if doneCount != 1 {
 		t.Errorf("expected 1 done queue entry, got %d", doneCount)

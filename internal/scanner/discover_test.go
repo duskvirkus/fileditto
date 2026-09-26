@@ -45,7 +45,7 @@ func TestDiscover_EnqueuesAllFiles(t *testing.T) {
 	}
 
 	var count int
-	conn.QueryRow(`SELECT COUNT(*) FROM ingestion_queue`).Scan(&count)
+	conn.QueryRow(`SELECT COUNT(*) FROM IngestionQueue`).Scan(&count)
 	if count != 4 {
 		t.Errorf("expected 4 queue entries, got %d", count)
 	}
@@ -59,7 +59,7 @@ func TestDiscover_AllEntriesArePending(t *testing.T) {
 	scanner.Discover(conn, dir)
 
 	var status string
-	conn.QueryRow(`SELECT status FROM ingestion_queue`).Scan(&status)
+	conn.QueryRow(`SELECT status FROM IngestionQueue`).Scan(&status)
 	if status != "pending" {
 		t.Errorf("expected status=pending, got %q", status)
 	}
@@ -74,7 +74,7 @@ func TestDiscover_SkipsDirectories(t *testing.T) {
 	scanner.Discover(conn, dir)
 
 	var count int
-	conn.QueryRow(`SELECT COUNT(*) FROM ingestion_queue`).Scan(&count)
+	conn.QueryRow(`SELECT COUNT(*) FROM IngestionQueue`).Scan(&count)
 	if count != 1 {
 		t.Errorf("expected 1 entry (file only, not directory), got %d", count)
 	}
