@@ -1,6 +1,5 @@
 # Built binaries
-/migrate
-/ingest
+/pxvault
 *.exe
 *.exe~
 *.dll
