@@ -36,7 +36,10 @@ func ProcessNext(sqlDB *sql.DB) (bool, error) {
 
 	if err := processEntry(sqlDB, entry); err != nil {
 		errStr := err.Error()
-		_ = SetStatus(sqlDB, entry.ID, StatusFailed, &errStr)
+		if statusErr := SetStatus(sqlDB, entry.ID, StatusFailed, &errStr); statusErr != nil {
+			return true, fmt.Errorf("process failed (%w); also failed to record failure: %v", err, statusErr)
+		}
+		return true, fmt.Errorf("process %s: %w", entry.FilePath, err)
 	}
 	return true, nil
 }
