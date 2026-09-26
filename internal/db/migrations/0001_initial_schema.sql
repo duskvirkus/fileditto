@@ -126,5 +126,6 @@ CREATE TABLE ingestion_queue (
     attempt_count INTEGER,
     error         TEXT,
     created_at    TEXT    NOT NULL,
-    updated_at    TEXT    NOT NULL
+    updated_at    TEXT    NOT NULL,
+    UNIQUE(file_path, device_id)
 );

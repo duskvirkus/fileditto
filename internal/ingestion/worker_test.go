@@ -103,7 +103,7 @@ func TestProcessNext_DuplicateFileNotReinserted(t *testing.T) {
 	ingestion.Enqueue(conn, imgPath)
 	ingestion.ProcessNext(conn)
 
-	// Enqueue the same file again
+	// Second enqueue of the same path is a no-op due to UNIQUE(file_path, device_id).
 	ingestion.Enqueue(conn, imgPath)
 	ingestion.ProcessNext(conn)
 
@@ -113,11 +113,17 @@ func TestProcessNext_DuplicateFileNotReinserted(t *testing.T) {
 		t.Errorf("expected 1 Files row (dedup), got %d", fileCount)
 	}
 
+	var queueCount int
+	conn.QueryRow(`SELECT COUNT(*) FROM ingestion_queue`).Scan(&queueCount)
+	if queueCount != 1 {
+		t.Errorf("expected 1 queue entry (duplicate path ignored), got %d", queueCount)
+	}
+
 	var doneCount int
 	conn.QueryRow(
 		`SELECT COUNT(*) FROM ingestion_queue WHERE status = 'done'`,
 	).Scan(&doneCount)
-	if doneCount != 2 {
-		t.Errorf("expected both queue entries to be done, got %d done", doneCount)
+	if doneCount != 1 {
+		t.Errorf("expected 1 done queue entry, got %d", doneCount)
 	}
 }

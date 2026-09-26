@@ -30,7 +30,7 @@ type QueueEntry struct {
 func Enqueue(db *sql.DB, filePath string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := db.Exec(
-		`INSERT INTO ingestion_queue (file_path, status, created_at, updated_at)
+		`INSERT OR IGNORE INTO ingestion_queue (file_path, status, created_at, updated_at)
 		 VALUES (?, 'pending', ?, ?)`,
 		filePath, now, now,
 	)
@@ -100,6 +100,20 @@ func SetStatus(db *sql.DB, id int64, status Status, errMsg *string) error {
 		return fmt.Errorf("set status %s for id %d: %w", status, id, err)
 	}
 	return nil
+}
+
+// ResetStuck moves any processing entries back to pending.
+// Call this on startup to recover from a previous crash.
+func ResetStuck(db *sql.DB) (int64, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	res, err := db.Exec(
+		`UPDATE ingestion_queue SET status = 'pending', updated_at = ? WHERE status = 'processing'`,
+		now,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("reset stuck entries: %w", err)
+	}
+	return res.RowsAffected()
 }
 
 // PendingCount returns the number of entries with status=pending.
