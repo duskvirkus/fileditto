@@ -95,3 +95,15 @@ CREATE TABLE Locations (
     created_at        TEXT,                        -- ISO-8601 UTC
     updated_at        TEXT                         -- ISO-8601 UTC
 );
+
+-- ingestion_queue: holds file paths discovered during scanning, pending ingestion.
+CREATE TABLE ingestion_queue (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_path     TEXT    NOT NULL,
+    status        TEXT    NOT NULL DEFAULT 'pending'
+                          CHECK(status IN ('pending', 'processing', 'done', 'failed', 'unsupported')),
+    attempt_count INTEGER,
+    error         TEXT,
+    created_at    TEXT    NOT NULL,
+    updated_at    TEXT    NOT NULL
+);
