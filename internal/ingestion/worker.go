@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -50,7 +51,7 @@ func processEntry(sqlDB *sql.DB, entry *QueueEntry) error {
 		return fmt.Errorf("detect mime: %w", err)
 	}
 
-	fileType := classifyMIME(mime.String())
+	fileType := classifyMIME(mime.String(), entry.FilePath)
 	if fileType == "unsupported" {
 		return SetStatus(sqlDB, entry.ID, StatusUnsupported, nil)
 	}
@@ -86,13 +87,32 @@ func processEntry(sqlDB *sql.DB, entry *QueueEntry) error {
 	return SetStatus(sqlDB, entry.ID, StatusDone, nil)
 }
 
-func classifyMIME(mime string) string {
+// rawExtensions lists file extensions that are camera RAW formats.
+// These may not be detected as image/* by MIME sniffing, so we fall back to extension.
+var rawExtensions = map[string]bool{
+	".cr2": true, ".cr3": true, // Canon
+	".nef": true,               // Nikon
+	".arw": true,               // Sony
+	".raf": true,               // Fujifilm
+	".orf": true,               // Olympus
+	".rw2": true,               // Panasonic
+	".dng": true,               // Adobe DNG
+	".pef": true,               // Pentax
+	".srw": true,               // Samsung
+	".x3f": true,               // Sigma
+}
+
+func classifyMIME(mime, path string) string {
 	switch {
 	case strings.HasPrefix(mime, "image/"):
 		return "photo"
 	case strings.HasPrefix(mime, "video/"):
 		return "video"
 	default:
+		ext := strings.ToLower(filepath.Ext(path))
+		if rawExtensions[ext] {
+			return "photo"
+		}
 		return "unsupported"
 	}
 }
@@ -128,21 +148,35 @@ func extractImageMetadata(path string) (map[string]interface{}, error) {
 
 	f, err := os.Open(path)
 	if err != nil {
-		return meta, err
+		return nil, err
 	}
 	defer f.Close()
 
-	cfg, _, err := image.DecodeConfig(f)
-	if err == nil {
+	cfg, _, decodeErr := image.DecodeConfig(f)
+	if decodeErr == nil {
 		meta["width"] = cfg.Width
 		meta["height"] = cfg.Height
 	}
 
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		return meta, nil
+		return nil, fmt.Errorf("seek for exif: %w", err)
 	}
+
 	x, err := exif.Decode(f)
 	if err == nil {
+		if decodeErr != nil {
+			// image.DecodeConfig couldn't read this format; try EXIF dimension tags.
+			if tag, err := x.Get(exif.PixelXDimension); err == nil {
+				if v, err := tag.Int(0); err == nil {
+					meta["width"] = v
+				}
+			}
+			if tag, err := x.Get(exif.PixelYDimension); err == nil {
+				if v, err := tag.Int(0); err == nil {
+					meta["height"] = v
+				}
+			}
+		}
 		if lat, long, err := x.LatLong(); err == nil {
 			meta["latitude"] = lat
 			meta["longitude"] = long
@@ -150,6 +184,10 @@ func extractImageMetadata(path string) (map[string]interface{}, error) {
 		if tm, err := x.DateTime(); err == nil {
 			meta["taken_at"] = tm.UTC().Format(time.RFC3339)
 		}
+	}
+
+	if _, ok := meta["width"]; !ok {
+		return nil, fmt.Errorf("could not determine image dimensions: %w", decodeErr)
 	}
 
 	return meta, nil
