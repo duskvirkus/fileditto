@@ -6,10 +6,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/duskvirkus/pxvault/internal/config"
-	"github.com/duskvirkus/pxvault/internal/db"
-	"github.com/duskvirkus/pxvault/internal/ingestion"
-	"github.com/duskvirkus/pxvault/internal/scanner"
+	"github.com/duskvirkus/fileditto/internal/config"
+	"github.com/duskvirkus/fileditto/internal/db"
+	"github.com/duskvirkus/fileditto/internal/ingestion"
+	"github.com/duskvirkus/fileditto/internal/scanner"
 )
 
 var ingestCmd = &cobra.Command{

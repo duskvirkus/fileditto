@@ -20,7 +20,7 @@ func dir() (string, error) {
 		}
 		base = filepath.Join(home, ".config")
 	}
-	return filepath.Join(base, "pxvault"), nil
+	return filepath.Join(base, "fileditto"), nil
 }
 
 func path() (string, error) {
@@ -38,7 +38,7 @@ func Load() (*Config, error) {
 	}
 	f, err := os.Open(p)
 	if os.IsNotExist(err) {
-		return nil, fmt.Errorf("no config file found; run 'pxvault db set-path <path>' first")
+		return nil, fmt.Errorf("no config file found; run 'fileditto db set-path <path>' first")
 	}
 	if err != nil {
 		return nil, fmt.Errorf("open config: %w", err)
@@ -50,7 +50,7 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
 	if cfg.DBPath == "" {
-		return nil, fmt.Errorf("config has no db_path set; run 'pxvault db set-path <path>'")
+		return nil, fmt.Errorf("config has no db_path set; run 'fileditto db set-path <path>'")
 	}
 	return &cfg, nil
 }

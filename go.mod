@@ -1,4 +1,4 @@
-module github.com/duskvirkus/pxvault
+module github.com/duskvirkus/fileditto
 
 go 1.26.0
 

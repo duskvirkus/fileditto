@@ -11,7 +11,7 @@ import (
 	"github.com/jaypipes/ghw"
 	"github.com/jaypipes/ghw/pkg/block"
 
-	"github.com/duskvirkus/pxvault/internal/db"
+	"github.com/duskvirkus/fileditto/internal/db"
 )
 
 // diskInfo holds detected attributes for a physical block device.

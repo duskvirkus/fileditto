@@ -13,8 +13,8 @@ func main() {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "pxvault",
-	Short: "Photo and video archive manager",
+	Use:   "fileditto",
+	Short: "File archive and backup manager",
 }
 
 func init() {

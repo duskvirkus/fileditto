@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/duskvirkus/pxvault/internal/ingestion"
+	"github.com/duskvirkus/fileditto/internal/ingestion"
 )
 
 // writePNG creates a minimal valid 1x1 PNG at path.

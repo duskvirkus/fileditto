@@ -6,7 +6,7 @@ import (
 	"io/fs"
 	"path/filepath"
 
-	"github.com/duskvirkus/pxvault/internal/ingestion"
+	"github.com/duskvirkus/fileditto/internal/ingestion"
 )
 
 // Discover walks root and enqueues every file it finds, without filtering.

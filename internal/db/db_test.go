@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/duskvirkus/pxvault/internal/db"
+	"github.com/duskvirkus/fileditto/internal/db"
 )
 
 // openTestDB opens a temporary SQLite database, runs migrations, and returns it.

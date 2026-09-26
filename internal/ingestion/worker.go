@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/duskvirkus/pxvault/internal/db"
+	"github.com/duskvirkus/fileditto/internal/db"
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/rwcarlsen/goexif/exif"
 	_ "golang.org/x/image/tiff"
