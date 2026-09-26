@@ -29,6 +29,7 @@ func init() {
 	rootCmd.AddCommand(dbCmd)
 	dbCmd.AddCommand(dbSetPathCmd)
 	dbCmd.AddCommand(dbPathCmd)
+	ingestCmd.Flags().Int("max-failures", 3, "abort after this many processing errors")
 }
 
 // --- ingest ---
@@ -37,66 +38,68 @@ var ingestCmd = &cobra.Command{
 	Use:   "ingest <directory>",
 	Short: "Scan a directory and ingest all media files",
 	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		root := args[0]
+	RunE:  runIngest,
+}
 
-		cfg, err := config.Load()
+func runIngest(cmd *cobra.Command, args []string) error {
+	root := args[0]
+
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+
+	conn, err := db.OpenDB(cfg.DBPath)
+	if err != nil {
+		return fmt.Errorf("open db: %w", err)
+	}
+	defer conn.Close()
+
+	if err := db.RunMigrations(conn); err != nil {
+		return fmt.Errorf("run migrations: %w", err)
+	}
+
+	recovered, err := ingestion.ResetStuck(conn)
+	if err != nil {
+		return fmt.Errorf("reset stuck entries: %w", err)
+	}
+	if recovered > 0 {
+		fmt.Printf("recovered %d stuck queue entries\n", recovered)
+	}
+
+	fmt.Printf("scanning %s\n", root)
+	if err := scanner.Discover(conn, root); err != nil {
+		return fmt.Errorf("scan: %w", err)
+	}
+
+	pending, err := ingestion.PendingCount(conn)
+	if err != nil {
+		return fmt.Errorf("pending count: %w", err)
+	}
+	fmt.Printf("processing %d files\n", pending)
+
+	maxFailures, _ := cmd.Flags().GetInt("max-failures")
+	var processed, failed int
+	for {
+		ok, err := ingestion.ProcessNext(conn)
 		if err != nil {
-			return err
-		}
-
-		conn, err := db.OpenDB(cfg.DBPath)
-		if err != nil {
-			return fmt.Errorf("open db: %w", err)
-		}
-		defer conn.Close()
-
-		if err := db.RunMigrations(conn); err != nil {
-			return fmt.Errorf("run migrations: %w", err)
-		}
-
-		recovered, err := ingestion.ResetStuck(conn)
-		if err != nil {
-			return fmt.Errorf("reset stuck entries: %w", err)
-		}
-		if recovered > 0 {
-			fmt.Printf("recovered %d stuck queue entries\n", recovered)
-		}
-
-		fmt.Printf("scanning %s\n", root)
-		if err := scanner.Discover(conn, root); err != nil {
-			return fmt.Errorf("scan: %w", err)
-		}
-
-		pending, err := ingestion.PendingCount(conn)
-		if err != nil {
-			return fmt.Errorf("pending count: %w", err)
-		}
-		fmt.Printf("processing %d files\n", pending)
-
-		const maxFailures = 3
-		var processed, failed int
-		for {
-			ok, err := ingestion.ProcessNext(conn)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "error: %v\n", err)
-				failed++
-				if failed >= maxFailures {
-					return fmt.Errorf("aborting after %d failures", failed)
-				}
-			}
-			if !ok {
-				break
-			}
-			processed++
-			if processed%100 == 0 {
-				fmt.Printf("  %d done\n", processed)
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			failed++
+			if failed >= maxFailures {
+				return fmt.Errorf("aborting after %d failures", failed)
 			}
 		}
+		if !ok {
+			break
+		}
+		processed++
+		if processed%100 == 0 {
+			fmt.Printf("  %d done\n", processed)
+		}
+	}
 
-		fmt.Printf("done: %d processed, %d errors\n", processed, failed)
-		return nil
-	},
+	fmt.Printf("done: %d processed, %d errors\n", processed, failed)
+	return nil
 }
 
 // --- migrate ---
