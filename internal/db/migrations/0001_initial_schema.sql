@@ -52,9 +52,29 @@ CREATE TABLE Video (
     metadata_blob    BLOB
 );
 
--- BlurayMedia: Blu-ray disc specific attributes.
+-- PhysicalLocations: named physical locations where media is stored (shelf, cabinet, off-site, etc.).
+CREATE TABLE PhysicalLocations (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,
+    notes      TEXT,
+    created_at TEXT,                   -- ISO-8601 UTC
+    updated_at TEXT                    -- ISO-8601 UTC
+);
+
+-- Media: tracks physical storage media. BlurayMedia and DriveMedia share this PK.
+CREATE TABLE Media (
+    id                   TEXT NOT NULL PRIMARY KEY,
+    media_type           TEXT NOT NULL CHECK(media_type IN ('bluray', 'drive')),
+    label                TEXT,
+    status               TEXT NOT NULL CHECK(status IN ('connected', 'disconnected', 'lost', 'damaged')),
+    physical_location_id TEXT REFERENCES PhysicalLocations(id),
+    created_at           TEXT,         -- ISO-8601 UTC
+    updated_at           TEXT          -- ISO-8601 UTC
+);
+
+-- BlurayMedia: Blu-ray disc specific attributes. Shares PK with Media.
 CREATE TABLE BlurayMedia (
-    id              TEXT    PRIMARY KEY,
+    id              TEXT    PRIMARY KEY REFERENCES Media(id) ON DELETE CASCADE,
     disc_label      TEXT,
     capacity_gb     REAL,
     burn_date       TEXT,               -- ISO-8601 date
@@ -62,26 +82,15 @@ CREATE TABLE BlurayMedia (
     verified        INTEGER NOT NULL DEFAULT 0  -- boolean: 0=false, 1=true
 );
 
--- DriveMedia: external drive specific attributes.
+-- DriveMedia: external drive specific attributes. Shares PK with Media.
 CREATE TABLE DriveMedia (
-    id             TEXT PRIMARY KEY,
+    id             TEXT PRIMARY KEY REFERENCES Media(id) ON DELETE CASCADE,
     serial_number  TEXT UNIQUE,
     make           TEXT,
     model          TEXT,
     capacity_gb    REAL,
     interface_type TEXT,
     acquired_date  TEXT                -- ISO-8601 date
-);
-
--- Media: tracks physical storage media; subtype_id references BlurayMedia or DriveMedia.
-CREATE TABLE Media (
-    id         TEXT NOT NULL PRIMARY KEY,
-    media_type TEXT NOT NULL CHECK(media_type IN ('bluray', 'drive')),
-    label      TEXT,
-    status     TEXT NOT NULL CHECK(status IN ('active', 'inactive', 'lost')),
-    subtype_id TEXT,                   -- references BlurayMedia.id or DriveMedia.id
-    created_at TEXT,                   -- ISO-8601 UTC
-    updated_at TEXT                    -- ISO-8601 UTC
 );
 
 -- Locations: maps a file copy to a physical location on a media item.
@@ -91,7 +100,7 @@ CREATE TABLE Locations (
     media_id          TEXT    NOT NULL REFERENCES Media(id) ON DELETE CASCADE,
     path_on_media     TEXT    NOT NULL,
     skip_for_counting INTEGER NOT NULL DEFAULT 0,  -- boolean: 1 = exclude from 3-2-1 count
-    status            TEXT    NOT NULL CHECK(status IN ('readable', 'unreadable', 'lost')),
+    status            TEXT    NOT NULL CHECK(status IN ('healthy', 'error')),
     created_at        TEXT,                        -- ISO-8601 UTC
     updated_at        TEXT                         -- ISO-8601 UTC
 );
