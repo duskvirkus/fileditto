@@ -117,13 +117,13 @@ func TestCascade_LocationsDeletedWithMedia(t *testing.T) {
 	mediaID := "media-loc-cascade"
 	conn.Exec(
 		`INSERT INTO Media (id, media_type, status) VALUES (?, ?, ?)`,
-		mediaID, "drive", "active",
+		mediaID, "drive", "connected",
 	)
 
 	locID := "loc-cascade"
 	_, err := conn.Exec(
 		`INSERT INTO Locations (id, file_id, media_id, path_on_media, status) VALUES (?, ?, ?, ?, ?)`,
-		locID, fileID, mediaID, "/files/photo.jpg", "readable",
+		locID, fileID, mediaID, "/files/photo.jpg", "healthy",
 	)
 	if err != nil {
 		t.Fatalf("insert Locations: %v", err)
@@ -180,7 +180,7 @@ func TestConstraint_InvalidLocationsStatusRejected(t *testing.T) {
 		fileID, sha256, 256, "generic",
 	)
 	mediaID := "media-loc-bad-status"
-	conn.Exec(`INSERT INTO Media (id, media_type, status) VALUES (?, ?, ?)`, mediaID, "drive", "active")
+	conn.Exec(`INSERT INTO Media (id, media_type, status) VALUES (?, ?, ?)`, mediaID, "drive", "connected")
 
 	_, err := conn.Exec(
 		`INSERT INTO Locations (id, file_id, media_id, path_on_media, status) VALUES (?, ?, ?, ?, ?)`,
