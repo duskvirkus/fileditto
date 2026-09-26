@@ -2,6 +2,7 @@ package ingestion_test
 
 import (
 	"bytes"
+	"database/sql"
 	"image"
 	"image/color"
 	"image/png"
@@ -26,9 +27,20 @@ func writePNG(t *testing.T, path string) {
 	}
 }
 
+func testMediaID(t *testing.T, conn *sql.DB) string {
+	t.Helper()
+	// Use a temp dir that exists on the local filesystem so ghw can detect the disk.
+	mediaID, err := ingestion.EnsureDriveForPath(conn, t.TempDir(), testDeviceID(t, conn))
+	if err != nil {
+		t.Fatalf("EnsureDriveForPath: %v", err)
+	}
+	return mediaID
+}
+
 func TestProcessNext_ReturnsFalseWhenQueueEmpty(t *testing.T) {
 	conn := openTestDB(t)
-	processed, err := ingestion.ProcessNext(conn)
+	mediaID := testMediaID(t, conn)
+	processed, err := ingestion.ProcessNext(conn, mediaID)
 	if err != nil {
 		t.Fatalf("ProcessNext: %v", err)
 	}
@@ -39,13 +51,15 @@ func TestProcessNext_ReturnsFalseWhenQueueEmpty(t *testing.T) {
 
 func TestProcessNext_PhotoFileWrittenToFilesAndPhoto(t *testing.T) {
 	conn := openTestDB(t)
+	devID := testDeviceID(t, conn)
+	mediaID := testMediaID(t, conn)
 
 	imgPath := filepath.Join(t.TempDir(), "test.png")
 	writePNG(t, imgPath)
 
-	ingestion.Enqueue(conn, imgPath)
+	ingestion.Enqueue(conn, imgPath, devID)
 
-	processed, err := ingestion.ProcessNext(conn)
+	processed, err := ingestion.ProcessNext(conn, mediaID)
 	if err != nil {
 		t.Fatalf("ProcessNext: %v", err)
 	}
@@ -65,8 +79,14 @@ func TestProcessNext_PhotoFileWrittenToFilesAndPhoto(t *testing.T) {
 		t.Errorf("expected 1 Photo row, got %d", photoCount)
 	}
 
+	var locCount int
+	conn.QueryRow(`SELECT COUNT(*) FROM Locations WHERE media_id = ? AND skip_for_counting = 1`, mediaID).Scan(&locCount)
+	if locCount != 1 {
+		t.Errorf("expected 1 Location row, got %d", locCount)
+	}
+
 	var status string
-	conn.QueryRow(`SELECT status FROM ingestion_queue WHERE file_path = ?`, imgPath).Scan(&status)
+	conn.QueryRow(`SELECT status FROM IngestionQueue WHERE file_path = ?`, imgPath).Scan(&status)
 	if status != "done" {
 		t.Errorf("expected queue status=done, got %q", status)
 	}
@@ -74,15 +94,17 @@ func TestProcessNext_PhotoFileWrittenToFilesAndPhoto(t *testing.T) {
 
 func TestProcessNext_UnsupportedFileSetToUnsupported(t *testing.T) {
 	conn := openTestDB(t)
+	devID := testDeviceID(t, conn)
+	mediaID := testMediaID(t, conn)
 
 	txtPath := filepath.Join(t.TempDir(), "notes.txt")
 	os.WriteFile(txtPath, []byte("hello"), 0644)
 
-	ingestion.Enqueue(conn, txtPath)
-	ingestion.ProcessNext(conn)
+	ingestion.Enqueue(conn, txtPath, devID)
+	ingestion.ProcessNext(conn, mediaID)
 
 	var status string
-	conn.QueryRow(`SELECT status FROM ingestion_queue WHERE file_path = ?`, txtPath).Scan(&status)
+	conn.QueryRow(`SELECT status FROM IngestionQueue WHERE file_path = ?`, txtPath).Scan(&status)
 	if status != "unsupported" {
 		t.Errorf("expected status=unsupported, got %q", status)
 	}
@@ -96,16 +118,18 @@ func TestProcessNext_UnsupportedFileSetToUnsupported(t *testing.T) {
 
 func TestProcessNext_DuplicateFileNotReinserted(t *testing.T) {
 	conn := openTestDB(t)
+	devID := testDeviceID(t, conn)
+	mediaID := testMediaID(t, conn)
 
 	imgPath := filepath.Join(t.TempDir(), "test.png")
 	writePNG(t, imgPath)
 
-	ingestion.Enqueue(conn, imgPath)
-	ingestion.ProcessNext(conn)
+	ingestion.Enqueue(conn, imgPath, devID)
+	ingestion.ProcessNext(conn, mediaID)
 
 	// Second enqueue of the same path is a no-op due to UNIQUE(file_path, device_id).
-	ingestion.Enqueue(conn, imgPath)
-	ingestion.ProcessNext(conn)
+	ingestion.Enqueue(conn, imgPath, devID)
+	ingestion.ProcessNext(conn, mediaID)
 
 	var fileCount int
 	conn.QueryRow(`SELECT COUNT(*) FROM Files`).Scan(&fileCount)
@@ -114,14 +138,14 @@ func TestProcessNext_DuplicateFileNotReinserted(t *testing.T) {
 	}
 
 	var queueCount int
-	conn.QueryRow(`SELECT COUNT(*) FROM ingestion_queue`).Scan(&queueCount)
+	conn.QueryRow(`SELECT COUNT(*) FROM IngestionQueue`).Scan(&queueCount)
 	if queueCount != 1 {
 		t.Errorf("expected 1 queue entry (duplicate path ignored), got %d", queueCount)
 	}
 
 	var doneCount int
 	conn.QueryRow(
-		`SELECT COUNT(*) FROM ingestion_queue WHERE status = 'done'`,
+		`SELECT COUNT(*) FROM IngestionQueue WHERE status = 'done'`,
 	).Scan(&doneCount)
 	if doneCount != 1 {
 		t.Errorf("expected 1 done queue entry, got %d", doneCount)

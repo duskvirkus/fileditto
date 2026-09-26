@@ -26,7 +26,7 @@ import (
 
 // ProcessNext dequeues and processes one pending entry.
 // Returns (true, nil) if an entry was processed, (false, nil) if the queue is empty.
-func ProcessNext(sqlDB *sql.DB) (bool, error) {
+func ProcessNext(sqlDB *sql.DB, mediaID string) (bool, error) {
 	entry, err := DequeueNext(sqlDB)
 	if err != nil {
 		return false, err
@@ -35,7 +35,7 @@ func ProcessNext(sqlDB *sql.DB) (bool, error) {
 		return false, nil
 	}
 
-	if err := processEntry(sqlDB, entry); err != nil {
+	if err := processEntry(sqlDB, entry, mediaID); err != nil {
 		errStr := err.Error()
 		if statusErr := SetStatus(sqlDB, entry.ID, StatusFailed, &errStr); statusErr != nil {
 			return true, fmt.Errorf("process failed (%w); also failed to record failure: %v", err, statusErr)
@@ -45,7 +45,7 @@ func ProcessNext(sqlDB *sql.DB) (bool, error) {
 	return true, nil
 }
 
-func processEntry(sqlDB *sql.DB, entry *QueueEntry) error {
+func processEntry(sqlDB *sql.DB, entry *QueueEntry, mediaID string) error {
 	mime, err := mimetype.DetectFile(entry.FilePath)
 	if err != nil {
 		return fmt.Errorf("detect mime: %w", err)
@@ -80,7 +80,12 @@ func processEntry(sqlDB *sql.DB, entry *QueueEntry) error {
 		return fmt.Errorf("extract metadata: %w", err)
 	}
 
-	if err := writeFile(sqlDB, fileUUID.String(), sha, size, fileType, meta); err != nil {
+	absPath, err := filepath.Abs(entry.FilePath)
+	if err != nil {
+		return fmt.Errorf("resolve path: %w", err)
+	}
+
+	if err := writeFile(sqlDB, fileUUID.String(), sha, size, fileType, meta, mediaID, absPath); err != nil {
 		return err
 	}
 
@@ -236,7 +241,7 @@ func extractVideoMetadata(path string) (map[string]interface{}, error) {
 	return meta, nil
 }
 
-func writeFile(sqlDB *sql.DB, fileID, sha string, size int64, fileType string, meta map[string]interface{}) error {
+func writeFile(sqlDB *sql.DB, fileID, sha string, size int64, fileType string, meta map[string]interface{}, mediaID, pathOnMedia string) error {
 	tx, err := sqlDB.Begin()
 	if err != nil {
 		return err
@@ -276,6 +281,15 @@ func writeFile(sqlDB *sql.DB, fileID, sha string, size int64, fileType string, m
 		); err != nil {
 			return fmt.Errorf("insert Video: %w", err)
 		}
+	}
+
+	locID := db.NameUUID(fileID + ":" + mediaID + ":" + pathOnMedia).String()
+	if _, err := tx.Exec(
+		`INSERT INTO Locations (id, file_id, media_id, path_on_media, skip_for_counting, status, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, 1, 'healthy', ?, ?)`,
+		locID, fileID, mediaID, pathOnMedia, now, now,
+	); err != nil {
+		return fmt.Errorf("insert Location: %w", err)
 	}
 
 	return tx.Commit()

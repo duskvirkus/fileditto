@@ -31,12 +31,12 @@ type QueueEntry struct {
 }
 
 // Enqueue adds a file path to the ingestion queue with status=pending.
-func Enqueue(db *sql.DB, filePath string) error {
+func Enqueue(db *sql.DB, filePath string, deviceID int64) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := db.Exec(
-		`INSERT OR IGNORE INTO ingestion_queue (file_path, status, created_at, updated_at)
-		 VALUES (?, 'pending', ?, ?)`,
-		filePath, now, now,
+		`INSERT OR IGNORE INTO IngestionQueue (file_path, device_id, status, created_at, updated_at)
+		 VALUES (?, ?, 'pending', ?, ?)`,
+		filePath, deviceID, now, now,
 	)
 	if err != nil {
 		return fmt.Errorf("enqueue %s: %w", filePath, err)
@@ -56,7 +56,7 @@ func DequeueNext(db *sql.DB) (*QueueEntry, error) {
 	var entry QueueEntry
 	err = tx.QueryRow(
 		`SELECT id, file_path, status, attempt_count, error, created_at, updated_at
-		 FROM ingestion_queue
+		 FROM IngestionQueue
 		 WHERE status = 'pending'
 		    OR (status = 'failed' AND COALESCE(attempt_count, 0) < ?)
 		 ORDER BY id LIMIT 1`,
@@ -75,7 +75,7 @@ func DequeueNext(db *sql.DB) (*QueueEntry, error) {
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	if _, err := tx.Exec(
-		`UPDATE ingestion_queue SET status = 'processing', updated_at = ? WHERE id = ?`,
+		`UPDATE IngestionQueue SET status = 'processing', updated_at = ? WHERE id = ?`,
 		now, entry.ID,
 	); err != nil {
 		return nil, fmt.Errorf("mark processing: %w", err)
@@ -92,7 +92,7 @@ func SetStatus(db *sql.DB, id int64, status Status, errMsg *string) error {
 	var err error
 	if status == StatusFailed {
 		_, err = db.Exec(
-			`UPDATE ingestion_queue
+			`UPDATE IngestionQueue
 			 SET status = ?, error = ?, updated_at = ?,
 			     attempt_count = COALESCE(attempt_count, 0) + 1
 			 WHERE id = ?`,
@@ -100,7 +100,7 @@ func SetStatus(db *sql.DB, id int64, status Status, errMsg *string) error {
 		)
 	} else {
 		_, err = db.Exec(
-			`UPDATE ingestion_queue SET status = ?, error = ?, updated_at = ? WHERE id = ?`,
+			`UPDATE IngestionQueue SET status = ?, error = ?, updated_at = ? WHERE id = ?`,
 			status, errMsg, now, id,
 		)
 	}
@@ -115,7 +115,7 @@ func SetStatus(db *sql.DB, id int64, status Status, errMsg *string) error {
 func ResetStuck(db *sql.DB) (int64, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	res, err := db.Exec(
-		`UPDATE ingestion_queue SET status = 'pending', updated_at = ? WHERE status = 'processing'`,
+		`UPDATE IngestionQueue SET status = 'pending', updated_at = ? WHERE status = 'processing'`,
 		now,
 	)
 	if err != nil {
@@ -128,7 +128,7 @@ func ResetStuck(db *sql.DB) (int64, error) {
 func PendingCount(db *sql.DB) (int, error) {
 	var count int
 	if err := db.QueryRow(
-		`SELECT COUNT(*) FROM ingestion_queue WHERE status = 'pending'`,
+		`SELECT COUNT(*) FROM IngestionQueue WHERE status = 'pending'`,
 	).Scan(&count); err != nil {
 		return 0, err
 	}

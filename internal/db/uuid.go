@@ -14,3 +14,8 @@ var projectNamespaceUUID = uuid.MustParse(ProjectNamespace)
 func FileUUID(sha256hex string) (uuid.UUID, error) {
 	return uuid.NewSHA1(projectNamespaceUUID, []byte(sha256hex)), nil
 }
+
+// NameUUID derives a deterministic UUID v5 for any named entity within the pxvault namespace.
+func NameUUID(name string) uuid.UUID {
+	return uuid.NewSHA1(projectNamespaceUUID, []byte(name))
+}

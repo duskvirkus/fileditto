@@ -63,11 +63,12 @@ CREATE TABLE PhysicalLocations (
 
 -- Media: tracks physical storage media. BlurayMedia and DriveMedia share this PK.
 CREATE TABLE Media (
-    id                   TEXT NOT NULL PRIMARY KEY,
-    media_type           TEXT NOT NULL CHECK(media_type IN ('bluray', 'drive')),
+    id                   TEXT    NOT NULL PRIMARY KEY,
+    media_type           TEXT    NOT NULL CHECK(media_type IN ('bluray', 'drive')),
     label                TEXT,
-    status               TEXT NOT NULL CHECK(status IN ('connected', 'disconnected', 'lost', 'damaged')),
-    physical_location_id TEXT REFERENCES PhysicalLocations(id),
+    status               TEXT    NOT NULL CHECK(status IN ('connected', 'disconnected', 'lost', 'damaged')),
+    device_id            INTEGER REFERENCES Devices(id),  -- set when the media is connected to a device
+    physical_location_id TEXT    REFERENCES PhysicalLocations(id),
     created_at           TEXT,         -- ISO-8601 UTC
     updated_at           TEXT          -- ISO-8601 UTC
 );
@@ -105,22 +106,19 @@ CREATE TABLE Locations (
     updated_at        TEXT                         -- ISO-8601 UTC
 );
 
--- devices: known source devices that can contribute files to the ingestion queue.
--- id=0 is reserved for the local device and is always present.
-CREATE TABLE devices (
+-- Devices: known source devices that can contribute files to the ingestion queue.
+CREATE TABLE Devices (
     id          INTEGER PRIMARY KEY,
-    name        TEXT    NOT NULL,
+    name        TEXT    NOT NULL UNIQUE,
     created_at  TEXT    NOT NULL,
     updated_at  TEXT    NOT NULL
 );
-INSERT INTO devices (id, name, created_at, updated_at)
-    VALUES (0, 'local', '2000-01-01T00:00:00Z', '2000-01-01T00:00:00Z');
 
--- ingestion_queue: holds file paths discovered during scanning, pending ingestion.
-CREATE TABLE ingestion_queue (
+-- IngestionQueue: holds file paths discovered during scanning, pending ingestion.
+CREATE TABLE IngestionQueue (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     file_path     TEXT    NOT NULL,
-    device_id     INTEGER NOT NULL DEFAULT 0 REFERENCES devices(id),
+    device_id     INTEGER NOT NULL REFERENCES Devices(id),
     status        TEXT    NOT NULL DEFAULT 'pending'
                           CHECK(status IN ('pending', 'processing', 'done', 'failed', 'unsupported')),
     attempt_count INTEGER,

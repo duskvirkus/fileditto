@@ -23,14 +23,24 @@ func openTestDB(t *testing.T) *sql.DB {
 	return conn
 }
 
+func testDeviceID(t *testing.T, conn *sql.DB) int64 {
+	t.Helper()
+	id, err := ingestion.EnsureLocalDevice(conn)
+	if err != nil {
+		t.Fatalf("EnsureLocalDevice: %v", err)
+	}
+	return id
+}
+
 func TestEnqueue_CreatesPendingEntry(t *testing.T) {
 	conn := openTestDB(t)
-	if err := ingestion.Enqueue(conn, "/some/file.jpg"); err != nil {
+	devID := testDeviceID(t, conn)
+	if err := ingestion.Enqueue(conn, "/some/file.jpg", devID); err != nil {
 		t.Fatalf("Enqueue: %v", err)
 	}
 	var status string
 	if err := conn.QueryRow(
-		`SELECT status FROM ingestion_queue WHERE file_path = ?`, "/some/file.jpg",
+		`SELECT status FROM IngestionQueue WHERE file_path = ?`, "/some/file.jpg",
 	).Scan(&status); err != nil {
 		t.Fatalf("query: %v", err)
 	}
@@ -52,7 +62,8 @@ func TestDequeueNext_ReturnsNilWhenEmpty(t *testing.T) {
 
 func TestDequeueNext_MarksEntryAsProcessing(t *testing.T) {
 	conn := openTestDB(t)
-	if err := ingestion.Enqueue(conn, "/some/file.jpg"); err != nil {
+	devID := testDeviceID(t, conn)
+	if err := ingestion.Enqueue(conn, "/some/file.jpg", devID); err != nil {
 		t.Fatalf("Enqueue: %v", err)
 	}
 
@@ -68,7 +79,7 @@ func TestDequeueNext_MarksEntryAsProcessing(t *testing.T) {
 	}
 
 	var dbStatus string
-	conn.QueryRow(`SELECT status FROM ingestion_queue WHERE id = ?`, entry.ID).Scan(&dbStatus)
+	conn.QueryRow(`SELECT status FROM IngestionQueue WHERE id = ?`, entry.ID).Scan(&dbStatus)
 	if dbStatus != "processing" {
 		t.Errorf("expected DB status=processing, got %q", dbStatus)
 	}
@@ -76,14 +87,15 @@ func TestDequeueNext_MarksEntryAsProcessing(t *testing.T) {
 
 func TestSetStatus_Done(t *testing.T) {
 	conn := openTestDB(t)
-	ingestion.Enqueue(conn, "/some/file.jpg")
+	devID := testDeviceID(t, conn)
+	ingestion.Enqueue(conn, "/some/file.jpg", devID)
 	entry, _ := ingestion.DequeueNext(conn)
 
 	if err := ingestion.SetStatus(conn, entry.ID, ingestion.StatusDone, nil); err != nil {
 		t.Fatalf("SetStatus: %v", err)
 	}
 	var status string
-	conn.QueryRow(`SELECT status FROM ingestion_queue WHERE id = ?`, entry.ID).Scan(&status)
+	conn.QueryRow(`SELECT status FROM IngestionQueue WHERE id = ?`, entry.ID).Scan(&status)
 	if status != "done" {
 		t.Errorf("expected status=done, got %q", status)
 	}
@@ -91,7 +103,8 @@ func TestSetStatus_Done(t *testing.T) {
 
 func TestSetStatus_FailedIncrementsAttemptCount(t *testing.T) {
 	conn := openTestDB(t)
-	ingestion.Enqueue(conn, "/bad/file.jpg")
+	devID := testDeviceID(t, conn)
+	ingestion.Enqueue(conn, "/bad/file.jpg", devID)
 	entry, _ := ingestion.DequeueNext(conn)
 
 	errMsg := "something went wrong"
@@ -102,7 +115,7 @@ func TestSetStatus_FailedIncrementsAttemptCount(t *testing.T) {
 	var status, errCol string
 	var attempts *int
 	conn.QueryRow(
-		`SELECT status, error, attempt_count FROM ingestion_queue WHERE id = ?`, entry.ID,
+		`SELECT status, error, attempt_count FROM IngestionQueue WHERE id = ?`, entry.ID,
 	).Scan(&status, &errCol, &attempts)
 
 	if status != "failed" {
@@ -118,7 +131,8 @@ func TestSetStatus_FailedIncrementsAttemptCount(t *testing.T) {
 
 func TestDequeueNext_RetriesFailedEntryBelowMaxAttempts(t *testing.T) {
 	conn := openTestDB(t)
-	ingestion.Enqueue(conn, "/some/file.jpg")
+	devID := testDeviceID(t, conn)
+	ingestion.Enqueue(conn, "/some/file.jpg", devID)
 	entry, _ := ingestion.DequeueNext(conn)
 
 	errMsg := "transient error"
@@ -139,7 +153,8 @@ func TestDequeueNext_RetriesFailedEntryBelowMaxAttempts(t *testing.T) {
 
 func TestDequeueNext_DoesNotRetryExhaustedEntry(t *testing.T) {
 	conn := openTestDB(t)
-	ingestion.Enqueue(conn, "/some/file.jpg")
+	devID := testDeviceID(t, conn)
+	ingestion.Enqueue(conn, "/some/file.jpg", devID)
 
 	errMsg := "persistent error"
 	for range ingestion.MaxAttempts {
@@ -162,9 +177,10 @@ func TestDequeueNext_DoesNotRetryExhaustedEntry(t *testing.T) {
 
 func TestPendingCount(t *testing.T) {
 	conn := openTestDB(t)
-	ingestion.Enqueue(conn, "/file1.jpg")
-	ingestion.Enqueue(conn, "/file2.jpg")
-	ingestion.Enqueue(conn, "/file3.jpg")
+	devID := testDeviceID(t, conn)
+	ingestion.Enqueue(conn, "/file1.jpg", devID)
+	ingestion.Enqueue(conn, "/file2.jpg", devID)
+	ingestion.Enqueue(conn, "/file3.jpg", devID)
 
 	count, err := ingestion.PendingCount(conn)
 	if err != nil {
