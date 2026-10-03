@@ -5,8 +5,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/duskvirkus/fileditto/internal/app"
 	"github.com/duskvirkus/fileditto/internal/config"
-	"github.com/duskvirkus/fileditto/internal/db"
 )
 
 var migrateCmd = &cobra.Command{
@@ -18,18 +18,15 @@ var migrateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-
-		conn, err := db.OpenDB(cfg.DBPath)
+		d, err := app.OpenDB(cfg)
 		if err != nil {
 			return fmt.Errorf("open db: %w", err)
 		}
-		defer conn.Close()
-
-		if err := db.RunMigrations(conn); err != nil {
+		defer d.Close()
+		if err := d.Migrate(); err != nil {
 			return fmt.Errorf("run migrations: %w", err)
 		}
-
-		fmt.Printf("database migrated: %s\n", cfg.DBPath)
+		fmt.Println("migrations complete")
 		return nil
 	},
 }
