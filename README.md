@@ -32,7 +32,7 @@ go build -o fileditto ./cmd/fileditto
 - `fileditto migrate` — run pending database migrations
 - `fileditto db configure` — interactively set up the database connection
 - `fileditto db set-path <path>` — shortcut to configure SQLite at a specific path
-- `fileditto db path` — print the configured database path or DSN
+- `fileditto db show` — print the current database configuration
 
 ## Configuration
 
