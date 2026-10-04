@@ -15,7 +15,7 @@ var dbCmd = &cobra.Command{
 
 func init() {
 	dbCmd.AddCommand(dbSetPathCmd)
-	dbCmd.AddCommand(dbPathCmd)
+	dbCmd.AddCommand(dbShowCmd)
 	dbCmd.AddCommand(dbConfigureCmd)
 }
 
@@ -33,22 +33,21 @@ var dbSetPathCmd = &cobra.Command{
 	},
 }
 
-var dbPathCmd = &cobra.Command{
-	Use:   "path",
-	Short: "Show the configured database path or DSN",
+var dbShowCmd = &cobra.Command{
+	Use:   "show",
+	Short: "Show the current database configuration",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.Load()
 		if err != nil {
 			return err
 		}
+		fmt.Printf("type: %s\n", cfg.DBType)
 		switch cfg.DBType {
 		case "sqlite":
-			fmt.Println(cfg.DBPath)
+			fmt.Printf("path: %s\n", cfg.DBPath)
 		case "postgres":
-			fmt.Println(cfg.DBDSN)
-		default:
-			fmt.Printf("type=%s (unconfigured)\n", cfg.DBType)
+			fmt.Printf("dsn:  %s\n", cfg.DBDSN)
 		}
 		return nil
 	},
