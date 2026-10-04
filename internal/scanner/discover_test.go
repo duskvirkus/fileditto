@@ -1,42 +1,41 @@
 package scanner_test
 
 import (
-	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/duskvirkus/fileditto/internal/db"
-	"github.com/duskvirkus/fileditto/internal/ingestion"
+	"github.com/duskvirkus/fileditto/internal/db/sqlite"
 	"github.com/duskvirkus/fileditto/internal/scanner"
 )
 
-func openTestDB(t *testing.T) *sql.DB {
+func openTestDB(t *testing.T) db.DB {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "test.db")
-	conn, err := db.OpenDB(path)
+	conn, err := sqlite.Open(path)
 	if err != nil {
-		t.Fatalf("OpenDB: %v", err)
+		t.Fatalf("sqlite.Open: %v", err)
 	}
-	if err := db.RunMigrations(conn); err != nil {
-		t.Fatalf("RunMigrations: %v", err)
+	if err := conn.Migrate(); err != nil {
+		t.Fatalf("Migrate: %v", err)
 	}
 	t.Cleanup(func() { conn.Close() })
 	return conn
 }
 
-func testDeviceID(t *testing.T, conn *sql.DB) int64 {
+func testDeviceID(t *testing.T, d db.DB) string {
 	t.Helper()
-	id, err := ingestion.EnsureLocalDevice(conn)
+	id, err := d.Devices().EnsureLocal()
 	if err != nil {
-		t.Fatalf("EnsureLocalDevice: %v", err)
+		t.Fatalf("EnsureLocal: %v", err)
 	}
 	return id
 }
 
 func TestDiscover_EnqueuesAllFiles(t *testing.T) {
-	conn := openTestDB(t)
-	devID := testDeviceID(t, conn)
+	d := openTestDB(t)
+	devID := testDeviceID(t, d)
 	dir := t.TempDir()
 
 	paths := []string{
@@ -51,52 +50,53 @@ func TestDiscover_EnqueuesAllFiles(t *testing.T) {
 		os.WriteFile(full, []byte("data"), 0644)
 	}
 
-	if err := scanner.Discover(conn, dir, devID); err != nil {
+	if err := scanner.Discover(d, dir, devID); err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
 
+	rc := d.(db.RawConner).RawConn()
 	var count int
-	conn.QueryRow(`SELECT COUNT(*) FROM IngestionQueue`).Scan(&count)
+	rc.QueryRow(`SELECT COUNT(*) FROM IngestionQueue`).Scan(&count)
 	if count != 4 {
 		t.Errorf("expected 4 queue entries, got %d", count)
 	}
 }
 
 func TestDiscover_AllEntriesArePending(t *testing.T) {
-	conn := openTestDB(t)
-	devID := testDeviceID(t, conn)
+	d := openTestDB(t)
+	devID := testDeviceID(t, d)
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "file.txt"), []byte("data"), 0644)
+	scanner.Discover(d, dir, devID)
 
-	scanner.Discover(conn, dir, devID)
-
+	rc := d.(db.RawConner).RawConn()
 	var status string
-	conn.QueryRow(`SELECT status FROM IngestionQueue`).Scan(&status)
+	rc.QueryRow(`SELECT status FROM IngestionQueue`).Scan(&status)
 	if status != "pending" {
-		t.Errorf("expected status=pending, got %q", status)
+		t.Errorf("expected pending, got %q", status)
 	}
 }
 
 func TestDiscover_SkipsDirectories(t *testing.T) {
-	conn := openTestDB(t)
-	devID := testDeviceID(t, conn)
+	d := openTestDB(t)
+	devID := testDeviceID(t, d)
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, "subdir"), 0755)
 	os.WriteFile(filepath.Join(dir, "file.txt"), []byte("data"), 0644)
+	scanner.Discover(d, dir, devID)
 
-	scanner.Discover(conn, dir, devID)
-
+	rc := d.(db.RawConner).RawConn()
 	var count int
-	conn.QueryRow(`SELECT COUNT(*) FROM IngestionQueue`).Scan(&count)
+	rc.QueryRow(`SELECT COUNT(*) FROM IngestionQueue`).Scan(&count)
 	if count != 1 {
-		t.Errorf("expected 1 entry (file only, not directory), got %d", count)
+		t.Errorf("expected 1, got %d", count)
 	}
 }
 
 func TestDiscover_ReturnsErrorForNonexistentPath(t *testing.T) {
-	conn := openTestDB(t)
-	devID := testDeviceID(t, conn)
-	err := scanner.Discover(conn, "/nonexistent/path/that/does/not/exist", devID)
+	d := openTestDB(t)
+	devID := testDeviceID(t, d)
+	err := scanner.Discover(d, "/nonexistent/path", devID)
 	if err == nil {
 		t.Error("expected error for nonexistent path, got nil")
 	}

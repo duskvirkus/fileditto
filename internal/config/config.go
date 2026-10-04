@@ -1,3 +1,5 @@
+// Package config manages the fileditto configuration file at
+// $XDG_CONFIG_HOME/fileditto/config.json.
 package config
 
 import (
@@ -7,8 +9,11 @@ import (
 	"path/filepath"
 )
 
+// Config holds persisted settings for fileditto.
 type Config struct {
-	DBPath string `json:"db_path"`
+	DBType string `json:"db_type"`           // "sqlite" | "postgres"
+	DBPath string `json:"db_path,omitempty"` // SQLite only
+	DBDSN  string `json:"db_dsn,omitempty"`  // PostgreSQL only
 }
 
 func dir() (string, error) {
@@ -31,6 +36,8 @@ func path() (string, error) {
 	return filepath.Join(d, "config.json"), nil
 }
 
+// Load reads and validates the config file, returning an error if it does not
+// exist or has no db_type set.
 func Load() (*Config, error) {
 	p, err := path()
 	if err != nil {
@@ -38,7 +45,7 @@ func Load() (*Config, error) {
 	}
 	f, err := os.Open(p)
 	if os.IsNotExist(err) {
-		return nil, fmt.Errorf("no config file found; run 'fileditto db set-path <path>' first")
+		return nil, fmt.Errorf("no config file found; run 'fileditto db configure'")
 	}
 	if err != nil {
 		return nil, fmt.Errorf("open config: %w", err)
@@ -49,12 +56,13 @@ func Load() (*Config, error) {
 	if err := json.NewDecoder(f).Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
-	if cfg.DBPath == "" {
-		return nil, fmt.Errorf("config has no db_path set; run 'fileditto db set-path <path>'")
+	if cfg.DBType == "" {
+		return nil, fmt.Errorf("config has no db_type; run 'fileditto db configure'")
 	}
 	return &cfg, nil
 }
 
+// Save writes cfg to the config file, creating the directory if needed.
 func Save(cfg *Config) error {
 	d, err := dir()
 	if err != nil {
@@ -69,7 +77,6 @@ func Save(cfg *Config) error {
 		return fmt.Errorf("write config: %w", err)
 	}
 	defer f.Close()
-
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")
 	return enc.Encode(cfg)

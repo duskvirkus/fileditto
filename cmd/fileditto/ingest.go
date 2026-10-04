@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/duskvirkus/fileditto/internal/app"
 	"github.com/duskvirkus/fileditto/internal/config"
-	"github.com/duskvirkus/fileditto/internal/db"
 	"github.com/duskvirkus/fileditto/internal/ingestion"
 	"github.com/duskvirkus/fileditto/internal/scanner"
 )
@@ -31,17 +31,17 @@ func runIngest(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	conn, err := db.OpenDB(cfg.DBPath)
+	d, err := app.OpenDB(cfg)
 	if err != nil {
 		return fmt.Errorf("open db: %w", err)
 	}
-	defer conn.Close()
+	defer d.Close()
 
-	if err := db.RunMigrations(conn); err != nil {
+	if err := d.Migrate(); err != nil {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 
-	recovered, err := ingestion.ResetStuck(conn)
+	recovered, err := d.Queue().ResetStuck()
 	if err != nil {
 		return fmt.Errorf("reset stuck entries: %w", err)
 	}
@@ -49,22 +49,22 @@ func runIngest(cmd *cobra.Command, args []string) error {
 		fmt.Printf("recovered %d stuck queue entries\n", recovered)
 	}
 
-	deviceID, err := ingestion.EnsureLocalDevice(conn)
+	deviceID, err := d.Devices().EnsureLocal()
 	if err != nil {
 		return fmt.Errorf("ensure local device: %w", err)
 	}
 
-	mediaID, err := ingestion.EnsureDriveForPath(conn, root, deviceID)
+	mediaID, err := d.Media().EnsureDriveForPath(root, deviceID)
 	if err != nil {
 		return fmt.Errorf("ensure local drive: %w", err)
 	}
 
 	fmt.Printf("scanning %s\n", root)
-	if err := scanner.Discover(conn, root, deviceID); err != nil {
+	if err := scanner.Discover(d, root, deviceID); err != nil {
 		return fmt.Errorf("scan: %w", err)
 	}
 
-	pending, err := ingestion.PendingCount(conn)
+	pending, err := d.Queue().PendingCount()
 	if err != nil {
 		return fmt.Errorf("pending count: %w", err)
 	}
@@ -73,7 +73,7 @@ func runIngest(cmd *cobra.Command, args []string) error {
 	maxFailures, _ := cmd.Flags().GetInt("max-failures")
 	var processed, failed int
 	for {
-		ok, err := ingestion.ProcessNext(conn, mediaID)
+		ok, err := ingestion.ProcessNext(d, mediaID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			failed++

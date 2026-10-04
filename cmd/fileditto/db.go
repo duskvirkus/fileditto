@@ -15,15 +15,16 @@ var dbCmd = &cobra.Command{
 
 func init() {
 	dbCmd.AddCommand(dbSetPathCmd)
-	dbCmd.AddCommand(dbPathCmd)
+	dbCmd.AddCommand(dbShowCmd)
+	dbCmd.AddCommand(dbConfigureCmd)
 }
 
 var dbSetPathCmd = &cobra.Command{
 	Use:   "set-path <path>",
-	Short: "Set the database file path",
+	Short: "Set the SQLite database file path",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg := &config.Config{DBPath: args[0]}
+		cfg := &config.Config{DBType: "sqlite", DBPath: args[0]}
 		if err := config.Save(cfg); err != nil {
 			return err
 		}
@@ -32,16 +33,22 @@ var dbSetPathCmd = &cobra.Command{
 	},
 }
 
-var dbPathCmd = &cobra.Command{
-	Use:   "path",
-	Short: "Show the configured database file path",
+var dbShowCmd = &cobra.Command{
+	Use:   "show",
+	Short: "Show the current database configuration",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.Load()
 		if err != nil {
 			return err
 		}
-		fmt.Println(cfg.DBPath)
+		fmt.Printf("type: %s\n", cfg.DBType)
+		switch cfg.DBType {
+		case "sqlite":
+			fmt.Printf("path: %s\n", cfg.DBPath)
+		case "postgres":
+			fmt.Printf("dsn:  %s\n", cfg.DBDSN)
+		}
 		return nil
 	},
 }

@@ -1,213 +1,135 @@
+// Package db defines the database interface, domain types, and shared migration
+// infrastructure used by both the SQLite and PostgreSQL implementations.
 package db
 
 import (
-	"crypto/sha256"
 	"database/sql"
 	"embed"
-	"fmt"
-	"io/fs"
-	"sort"
-	"strings"
-	"time"
-
-	_ "modernc.org/sqlite"
 )
 
-//go:embed migrations/*.sql
-var migrationsFS embed.FS
+// Dialect identifies the database backend.
+type Dialect string
 
-// OpenDB opens or creates the SQLite database at path, enabling WAL mode.
-func OpenDB(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		return nil, fmt.Errorf("open db: %w", err)
-	}
+const (
+	// SQLite selects the SQLite backend.
+	SQLite Dialect = "sqlite"
+	// PostgreSQL selects the PostgreSQL backend.
+	PostgreSQL Dialect = "postgres"
+)
 
-	var journalMode string
-	if err := db.QueryRow("PRAGMA journal_mode=WAL").Scan(&journalMode); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("set WAL mode: %w", err)
-	}
-	if journalMode != "wal" {
-		db.Close()
-		return nil, fmt.Errorf("expected WAL journal mode, got %q", journalMode)
-	}
+// MigrationsFS embeds the SQL migration files for all dialects.
+//
+//go:embed migrations/shared all:migrations/sqlite all:migrations/postgres
+var MigrationsFS embed.FS
 
-	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("enable foreign keys: %w", err)
-	}
+// MaxAttempts is the number of processing attempts before a queue entry is
+// left permanently failed.
+const MaxAttempts = 3
 
-	return db, nil
+// DB is the top-level database handle. It provides access to each domain
+// repository and manages migrations and lifecycle.
+type DB interface {
+	Queue()   QueueRepository
+	Files()   FileRepository
+	Devices() DeviceRepository
+	Media()   MediaRepository
+	Migrate() error
+	Close()   error
 }
 
-// RunMigrations applies all pending embedded migrations in order and verifies
-// checksums of previously-applied migrations against the stored records.
-// After all migrations, it verifies the project namespace UUID stored in
-// schema_metadata against the compiled-in constant.
-func RunMigrations(db *sql.DB) error {
-	files, err := loadMigrationFiles()
-	if err != nil {
-		return err
-	}
+// QueueStatus is the lifecycle state of an IngestionQueue entry.
+type QueueStatus string
 
-	// Determine current schema version (0 if schema_version table doesn't exist yet).
-	currentVersion, err := currentSchemaVersion(db)
-	if err != nil {
-		return fmt.Errorf("read schema_version: %w", err)
-	}
+const (
+	QueueStatusPending     QueueStatus = "pending"
+	QueueStatusProcessing  QueueStatus = "processing"
+	QueueStatusDone        QueueStatus = "done"
+	QueueStatusFailed      QueueStatus = "failed"
+	QueueStatusUnsupported QueueStatus = "unsupported"
+)
 
-	for _, mf := range files {
-		if mf.number <= currentVersion {
-			// Already applied — verify checksum to detect tampering.
-			if err := verifyChecksum(db, mf); err != nil {
-				return err
-			}
-			continue
-		}
-
-		// Apply this migration in a transaction.
-		if err := applyMigration(db, mf); err != nil {
-			return fmt.Errorf("apply migration %04d: %w", mf.number, err)
-		}
-	}
-
-	// Verify namespace UUID matches compiled-in constant.
-	if err := verifyNamespaceUUID(db); err != nil {
-		return err
-	}
-
-	return nil
+// QueueEntry is a row from IngestionQueue.
+type QueueEntry struct {
+	ID           string
+	FilePath     string
+	DeviceID     string
+	Status       QueueStatus
+	AttemptCount *int
+	Error        *string
+	CreatedAt    string
+	UpdatedAt    string
 }
 
-// migrationFile holds a parsed migration.
-type migrationFile struct {
-	number   int
-	filename string
-	content  []byte
-	checksum string // hex SHA-256 of content
+// File is a row from the Files table.
+type File struct {
+	ID        string
+	SHA256    string
+	SizeBytes int64
+	FileType  string
+	CreatedAt string
+	UpdatedAt string
 }
 
-func loadMigrationFiles() ([]migrationFile, error) {
-	entries, err := fs.ReadDir(migrationsFS, "migrations")
-	if err != nil {
-		return nil, fmt.Errorf("read migrations dir: %w", err)
-	}
-
-	var files []migrationFile
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".sql") {
-			continue
-		}
-
-		content, err := migrationsFS.ReadFile("migrations/" + e.Name())
-		if err != nil {
-			return nil, fmt.Errorf("read migration %s: %w", e.Name(), err)
-		}
-
-		var number int
-		if _, err := fmt.Sscanf(e.Name(), "%04d", &number); err != nil {
-			return nil, fmt.Errorf("parse migration number from %s: %w", e.Name(), err)
-		}
-
-		sum := sha256.Sum256(content)
-		files = append(files, migrationFile{
-			number:   number,
-			filename: e.Name(),
-			content:  content,
-			checksum: fmt.Sprintf("%x", sum),
-		})
-	}
-
-	sort.Slice(files, func(i, j int) bool {
-		return files[i].number < files[j].number
-	})
-	return files, nil
+// Photo is a row from the Photo table.
+type Photo struct {
+	WidthPx      int
+	HeightPx     int
+	ColorProfile string
+	MetadataJSON []byte
 }
 
-func currentSchemaVersion(db *sql.DB) (int, error) {
-	// Check if schema_version table exists.
-	var name string
-	err := db.QueryRow(
-		"SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'",
-	).Scan(&name)
-	if err == sql.ErrNoRows {
-		return 0, nil
-	}
-	if err != nil {
-		return 0, err
-	}
-
-	var version int
-	if err := db.QueryRow("SELECT version FROM schema_version").Scan(&version); err != nil {
-		return 0, err
-	}
-	return version, nil
+// Video is a row from the Video table.
+type Video struct {
+	DurationSeconds float64
+	WidthPx         int
+	HeightPx        int
+	FrameRate       float64
+	Codec           string
+	MetadataJSON    []byte
 }
 
-func verifyChecksum(db *sql.DB, mf migrationFile) error {
-	var stored string
-	err := db.QueryRow(
-		"SELECT checksum FROM schema_migrations WHERE migration_number = ?",
-		mf.number,
-	).Scan(&stored)
-	if err == sql.ErrNoRows {
-		// Not recorded — skip verification (migration may have been applied outside runner).
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("read checksum for migration %04d: %w", mf.number, err)
-	}
-	if stored != mf.checksum {
-		return fmt.Errorf(
-			"checksum mismatch for migration %04d: stored %s, computed %s",
-			mf.number, stored, mf.checksum,
-		)
-	}
-	return nil
+// QueueRepository manages the IngestionQueue table.
+type QueueRepository interface {
+	// Enqueue adds filePath to the queue for deviceID. A duplicate path+device
+	// pair is silently ignored.
+	Enqueue(filePath string, deviceID string) error
+	// DequeueNext atomically claims the next pending (or retryable failed) entry
+	// and marks it processing. Returns nil when the queue is empty.
+	DequeueNext() (*QueueEntry, error)
+	// SetStatus updates the status of entry id. When status is Failed,
+	// attempt_count is incremented and errMsg is stored.
+	SetStatus(id string, status QueueStatus, errMsg *string) error
+	// ResetStuck resets all processing entries back to pending and returns the
+	// count. Used at startup to recover from a previous crash.
+	ResetStuck() (int64, error)
+	// PendingCount returns the number of entries with status pending.
+	PendingCount() (int64, error)
 }
 
-func applyMigration(db *sql.DB, mf migrationFile) error {
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback() //nolint:errcheck
-
-	if _, err := tx.Exec(string(mf.content)); err != nil {
-		return fmt.Errorf("execute SQL: %w", err)
-	}
-
-	// Update schema_version.
-	if _, err := tx.Exec("UPDATE schema_version SET version = ?", mf.number); err != nil {
-		return fmt.Errorf("update schema_version: %w", err)
-	}
-
-	// Record in schema_migrations.
-	appliedAt := time.Now().UTC().Format(time.RFC3339)
-	if _, err := tx.Exec(
-		"INSERT INTO schema_migrations (migration_number, applied_at, checksum) VALUES (?, ?, ?)",
-		mf.number, appliedAt, mf.checksum,
-	); err != nil {
-		return fmt.Errorf("record schema_migrations: %w", err)
-	}
-
-	return tx.Commit()
+// FileRepository manages Files, Photo, Video, and Locations tables.
+type FileRepository interface {
+	// WriteFile atomically inserts a file with its type metadata and a Location
+	// record. If a file with the same SHA256 already exists, returns
+	// isNew=false and makes no changes. photo and video may be nil when not
+	// applicable to the file type.
+	WriteFile(f *File, photo *Photo, video *Video, mediaID, pathOnMedia string) (id string, isNew bool, err error)
 }
 
-func verifyNamespaceUUID(db *sql.DB) error {
-	var stored string
-	err := db.QueryRow(
-		"SELECT value FROM schema_metadata WHERE key = 'uuid_namespace'",
-	).Scan(&stored)
-	if err != nil {
-		return fmt.Errorf("read uuid_namespace from schema_metadata: %w", err)
-	}
-	if stored != ProjectNamespace {
-		return fmt.Errorf(
-			"namespace UUID mismatch: stored %q, compiled-in %q",
-			stored, ProjectNamespace,
-		)
-	}
-	return nil
+// DeviceRepository manages the Devices table.
+type DeviceRepository interface {
+	// EnsureLocal upserts a row for the current hostname and returns its ID.
+	EnsureLocal() (string, error)
+}
+
+// MediaRepository manages Media and DriveMedia tables.
+type MediaRepository interface {
+	// EnsureDriveForPath detects the physical disk backing path, upserts a
+	// Media+DriveMedia row for it, and returns the media ID.
+	EnsureDriveForPath(path string, deviceID string) (string, error)
+}
+
+// RawConner is implemented by concrete DB types to expose the underlying
+// *sql.DB for use in tests only.
+type RawConner interface {
+	RawConn() *sql.DB
 }

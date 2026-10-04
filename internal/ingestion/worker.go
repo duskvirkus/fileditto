@@ -1,8 +1,9 @@
+// Package ingestion processes queue entries: hashing files, extracting
+// metadata, and writing records to the database.
 package ingestion
 
 import (
 	"crypto/sha256"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -26,8 +27,8 @@ import (
 
 // ProcessNext dequeues and processes one pending entry.
 // Returns (true, nil) if an entry was processed, (false, nil) if the queue is empty.
-func ProcessNext(sqlDB *sql.DB, mediaID string) (bool, error) {
-	entry, err := DequeueNext(sqlDB)
+func ProcessNext(d db.DB, mediaID string) (bool, error) {
+	entry, err := d.Queue().DequeueNext()
 	if err != nil {
 		return false, err
 	}
@@ -35,9 +36,9 @@ func ProcessNext(sqlDB *sql.DB, mediaID string) (bool, error) {
 		return false, nil
 	}
 
-	if err := processEntry(sqlDB, entry, mediaID); err != nil {
+	if err := processEntry(d, entry, mediaID); err != nil {
 		errStr := err.Error()
-		if statusErr := SetStatus(sqlDB, entry.ID, StatusFailed, &errStr); statusErr != nil {
+		if statusErr := d.Queue().SetStatus(entry.ID, db.QueueStatusFailed, &errStr); statusErr != nil {
 			return true, fmt.Errorf("process failed (%w); also failed to record failure: %v", err, statusErr)
 		}
 		return true, fmt.Errorf("process %s: %w", entry.FilePath, err)
@@ -45,7 +46,7 @@ func ProcessNext(sqlDB *sql.DB, mediaID string) (bool, error) {
 	return true, nil
 }
 
-func processEntry(sqlDB *sql.DB, entry *QueueEntry, mediaID string) error {
+func processEntry(d db.DB, entry *db.QueueEntry, mediaID string) error {
 	mime, err := mimetype.DetectFile(entry.FilePath)
 	if err != nil {
 		return fmt.Errorf("detect mime: %w", err)
@@ -53,7 +54,7 @@ func processEntry(sqlDB *sql.DB, entry *QueueEntry, mediaID string) error {
 
 	fileType := classifyMIME(mime.String(), entry.FilePath)
 	if fileType == "unsupported" {
-		return SetStatus(sqlDB, entry.ID, StatusUnsupported, nil)
+		return d.Queue().SetStatus(entry.ID, db.QueueStatusUnsupported, nil)
 	}
 
 	sha, size, err := hashFile(entry.FilePath)
@@ -66,15 +67,6 @@ func processEntry(sqlDB *sql.DB, entry *QueueEntry, mediaID string) error {
 		return fmt.Errorf("derive uuid: %w", err)
 	}
 
-	var existing string
-	err = sqlDB.QueryRow(`SELECT id FROM Files WHERE sha256 = ?`, sha).Scan(&existing)
-	if err == nil {
-		return SetStatus(sqlDB, entry.ID, StatusDone, nil)
-	}
-	if err != sql.ErrNoRows {
-		return fmt.Errorf("dedup check: %w", err)
-	}
-
 	meta, err := extractMetadata(entry.FilePath, fileType)
 	if err != nil {
 		return fmt.Errorf("extract metadata: %w", err)
@@ -85,26 +77,58 @@ func processEntry(sqlDB *sql.DB, entry *QueueEntry, mediaID string) error {
 		return fmt.Errorf("resolve path: %w", err)
 	}
 
-	if err := writeFile(sqlDB, fileUUID.String(), sha, size, fileType, meta, mediaID, absPath); err != nil {
+	f := &db.File{
+		ID:        fileUUID.String(),
+		SHA256:    sha,
+		SizeBytes: size,
+		FileType:  fileType,
+	}
+
+	metaJSON, _ := json.Marshal(meta)
+
+	var photo *db.Photo
+	var video *db.Video
+	switch fileType {
+	case "photo":
+		width, _ := meta["width"].(int)
+		height, _ := meta["height"].(int)
+		photo = &db.Photo{
+			WidthPx:      width,
+			HeightPx:     height,
+			MetadataJSON: metaJSON,
+		}
+	case "video":
+		width, _ := meta["width"].(int)
+		height, _ := meta["height"].(int)
+		codec, _ := meta["codec"].(string)
+		durSec, _ := meta["duration_seconds"].(float64)
+		video = &db.Video{
+			DurationSeconds: durSec,
+			WidthPx:         width,
+			HeightPx:        height,
+			Codec:           codec,
+			MetadataJSON:    metaJSON,
+		}
+	}
+
+	if _, _, err := d.Files().WriteFile(f, photo, video, mediaID, absPath); err != nil {
 		return err
 	}
 
-	return SetStatus(sqlDB, entry.ID, StatusDone, nil)
+	return d.Queue().SetStatus(entry.ID, db.QueueStatusDone, nil)
 }
 
-// rawExtensions lists file extensions that are camera RAW formats.
-// These may not be detected as image/* by MIME sniffing, so we fall back to extension.
 var rawExtensions = map[string]bool{
-	".cr2": true, ".cr3": true, // Canon
-	".nef": true,               // Nikon
-	".arw": true,               // Sony
-	".raf": true,               // Fujifilm
-	".orf": true,               // Olympus
-	".rw2": true,               // Panasonic
-	".dng": true,               // Adobe DNG
-	".pef": true,               // Pentax
-	".srw": true,               // Samsung
-	".x3f": true,               // Sigma
+	".cr2": true, ".cr3": true,
+	".nef": true,
+	".arw": true,
+	".raf": true,
+	".orf": true,
+	".rw2": true,
+	".dng": true,
+	".pef": true,
+	".srw": true,
+	".x3f": true,
 }
 
 func classifyMIME(mime, path string) string {
@@ -128,7 +152,6 @@ func hashFile(path string) (sha256hex string, size int64, err error) {
 		return "", 0, fmt.Errorf("open for hash: %w", err)
 	}
 	defer f.Close()
-
 	h := sha256.New()
 	size, err = io.Copy(h, f)
 	if err != nil {
@@ -170,7 +193,6 @@ func extractImageMetadata(path string) (map[string]interface{}, error) {
 	x, err := exif.Decode(f)
 	if err == nil {
 		if decodeErr != nil {
-			// image.DecodeConfig couldn't read this format; try EXIF dimension tags.
 			if tag, err := x.Get(exif.PixelXDimension); err == nil {
 				if v, err := tag.Int(0); err == nil {
 					meta["width"] = v
@@ -194,7 +216,6 @@ func extractImageMetadata(path string) (map[string]interface{}, error) {
 	if _, ok := meta["width"]; !ok {
 		return nil, fmt.Errorf("could not determine image dimensions: %w", decodeErr)
 	}
-
 	return meta, nil
 }
 
@@ -220,12 +241,10 @@ func extractVideoMetadata(path string) (map[string]interface{}, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ffprobe: %w", err)
 	}
-
 	var fp ffprobeOut
 	if err := json.Unmarshal(out, &fp); err != nil {
 		return nil, err
 	}
-
 	meta := map[string]interface{}{}
 	if d, err := strconv.ParseFloat(fp.Format.Duration, 64); err == nil {
 		meta["duration_seconds"] = d
@@ -239,58 +258,4 @@ func extractVideoMetadata(path string) (map[string]interface{}, error) {
 		}
 	}
 	return meta, nil
-}
-
-func writeFile(sqlDB *sql.DB, fileID, sha string, size int64, fileType string, meta map[string]interface{}, mediaID, pathOnMedia string) error {
-	tx, err := sqlDB.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback() //nolint:errcheck
-
-	now := time.Now().UTC().Format(time.RFC3339)
-	if _, err := tx.Exec(
-		`INSERT INTO Files (id, sha256, size_bytes, file_type, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		fileID, sha, size, fileType, now, now,
-	); err != nil {
-		return fmt.Errorf("insert Files: %w", err)
-	}
-
-	metaJSON, _ := json.Marshal(meta)
-
-	switch fileType {
-	case "photo":
-		width, _ := meta["width"].(int)
-		height, _ := meta["height"].(int)
-		if _, err := tx.Exec(
-			`INSERT INTO Photo (id, width_px, height_px, metadata_blob) VALUES (?, ?, ?, ?)`,
-			fileID, width, height, metaJSON,
-		); err != nil {
-			return fmt.Errorf("insert Photo: %w", err)
-		}
-	case "video":
-		width, _ := meta["width"].(int)
-		height, _ := meta["height"].(int)
-		codec, _ := meta["codec"].(string)
-		durSec, _ := meta["duration_seconds"].(float64)
-		if _, err := tx.Exec(
-			`INSERT INTO Video (id, duration_seconds, width_px, height_px, codec, metadata_blob)
-			 VALUES (?, ?, ?, ?, ?, ?)`,
-			fileID, durSec, width, height, codec, metaJSON,
-		); err != nil {
-			return fmt.Errorf("insert Video: %w", err)
-		}
-	}
-
-	locID := db.NameUUID(fileID + ":" + mediaID + ":" + pathOnMedia).String()
-	if _, err := tx.Exec(
-		`INSERT INTO Locations (id, file_id, media_id, path_on_media, skip_for_counting, status, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, 1, 'healthy', ?, ?)`,
-		locID, fileID, mediaID, pathOnMedia, now, now,
-	); err != nil {
-		return fmt.Errorf("insert Location: %w", err)
-	}
-
-	return tx.Commit()
 }
