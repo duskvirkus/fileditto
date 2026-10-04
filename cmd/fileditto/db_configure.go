@@ -28,26 +28,36 @@ var dbConfigureCmd = &cobra.Command{
 		switch dbType {
 		case "SQLite":
 			cfg.DBType = "sqlite"
+			const defaultSQLitePath = "~/.local/share/fileditto/fileditto.db"
 			pathPrompt := promptui.Prompt{
 				Label:   "Database file path",
-				Default: "~/.local/share/fileditto/fileditto.db",
+				Default: defaultSQLitePath,
 			}
 			path, err := pathPrompt.Run()
 			if err != nil {
 				return fmt.Errorf("prompt: %w", err)
 			}
+			if path == "" {
+				path = defaultSQLitePath
+				fmt.Printf("using default path: %s\n", path)
+			}
 			cfg.DBPath = path
 
 		case "PostgreSQL":
 			cfg.DBType = "postgres"
+			const defaultDSN = "postgres://user:pass@localhost:5432/fileditto"
 			dsnPrompt := promptui.Prompt{
 				Label:   "Connection string (DSN)",
-				Default: "postgres://user:pass@localhost:5432/fileditto",
+				Default: defaultDSN,
 				Mask:    0,
 			}
 			dsn, err := dsnPrompt.Run()
 			if err != nil {
 				return fmt.Errorf("prompt: %w", err)
+			}
+			if dsn == "" {
+				dsn = defaultDSN
+				fmt.Printf("using default DSN: %s\n", dsn)
 			}
 			cfg.DBDSN = dsn
 		}
