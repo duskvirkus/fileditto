@@ -18,6 +18,8 @@ type DB struct {
 	media   *mediaRepository
 }
 
+// Open opens a connection to the PostgreSQL database at dsn and verifies it
+// with a ping. The caller should call Migrate before first use.
 func Open(dsn string) (*DB, error) {
 	conn, err := sql.Open("pgx", dsn)
 	if err != nil {
