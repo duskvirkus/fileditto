@@ -1,3 +1,4 @@
+// Package hardware provides utilities for detecting physical storage devices.
 package hardware
 
 import (

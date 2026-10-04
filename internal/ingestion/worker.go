@@ -1,3 +1,5 @@
+// Package ingestion processes queue entries: hashing files, extracting
+// metadata, and writing records to the database.
 package ingestion
 
 import (

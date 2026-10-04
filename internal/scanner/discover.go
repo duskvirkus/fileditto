@@ -1,3 +1,4 @@
+// Package scanner walks directory trees and enqueues files for ingestion.
 package scanner
 
 import (

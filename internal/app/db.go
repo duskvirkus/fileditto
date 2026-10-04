@@ -1,3 +1,4 @@
+// Package app provides application-level wiring such as the database factory.
 package app
 
 import (

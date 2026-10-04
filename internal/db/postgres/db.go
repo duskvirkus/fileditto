@@ -1,3 +1,4 @@
+// Package postgres implements the db.DB interface using a PostgreSQL database.
 package postgres
 
 import (

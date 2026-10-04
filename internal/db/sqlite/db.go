@@ -1,3 +1,4 @@
+// Package sqlite implements the db.DB interface using a local SQLite file.
 package sqlite
 
 import (

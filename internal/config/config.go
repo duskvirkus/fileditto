@@ -1,3 +1,5 @@
+// Package config manages the fileditto configuration file at
+// $XDG_CONFIG_HOME/fileditto/config.json.
 package config
 
 import (
@@ -7,6 +9,7 @@ import (
 	"path/filepath"
 )
 
+// Config holds persisted settings for fileditto.
 type Config struct {
 	DBType string `json:"db_type"`           // "sqlite" | "postgres"
 	DBPath string `json:"db_path,omitempty"` // SQLite only
@@ -33,6 +36,8 @@ func path() (string, error) {
 	return filepath.Join(d, "config.json"), nil
 }
 
+// Load reads and validates the config file, returning an error if it does not
+// exist or has no db_type set.
 func Load() (*Config, error) {
 	p, err := path()
 	if err != nil {
@@ -57,6 +62,7 @@ func Load() (*Config, error) {
 	return &cfg, nil
 }
 
+// Save writes cfg to the config file, creating the directory if needed.
 func Save(cfg *Config) error {
 	d, err := dir()
 	if err != nil {

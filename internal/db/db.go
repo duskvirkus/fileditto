@@ -1,3 +1,5 @@
+// Package db defines the database interface, domain types, and shared migration
+// infrastructure used by both the SQLite and PostgreSQL implementations.
 package db
 
 import (
@@ -9,10 +11,14 @@ import (
 type Dialect string
 
 const (
-	SQLite     Dialect = "sqlite"
+	// SQLite selects the SQLite backend.
+	SQLite Dialect = "sqlite"
+	// PostgreSQL selects the PostgreSQL backend.
 	PostgreSQL Dialect = "postgres"
 )
 
+// MigrationsFS embeds the SQL migration files for all dialects.
+//
 //go:embed migrations/shared all:migrations/sqlite all:migrations/postgres
 var MigrationsFS embed.FS
 
@@ -84,10 +90,19 @@ type Video struct {
 
 // QueueRepository manages the IngestionQueue table.
 type QueueRepository interface {
+	// Enqueue adds filePath to the queue for deviceID. A duplicate path+device
+	// pair is silently ignored.
 	Enqueue(filePath string, deviceID string) error
+	// DequeueNext atomically claims the next pending (or retryable failed) entry
+	// and marks it processing. Returns nil when the queue is empty.
 	DequeueNext() (*QueueEntry, error)
+	// SetStatus updates the status of entry id. When status is Failed,
+	// attempt_count is incremented and errMsg is stored.
 	SetStatus(id string, status QueueStatus, errMsg *string) error
+	// ResetStuck resets all processing entries back to pending and returns the
+	// count. Used at startup to recover from a previous crash.
 	ResetStuck() (int64, error)
+	// PendingCount returns the number of entries with status pending.
 	PendingCount() (int64, error)
 }
 
@@ -102,11 +117,14 @@ type FileRepository interface {
 
 // DeviceRepository manages the Devices table.
 type DeviceRepository interface {
+	// EnsureLocal upserts a row for the current hostname and returns its ID.
 	EnsureLocal() (string, error)
 }
 
 // MediaRepository manages Media and DriveMedia tables.
 type MediaRepository interface {
+	// EnsureDriveForPath detects the physical disk backing path, upserts a
+	// Media+DriveMedia row for it, and returns the media ID.
 	EnsureDriveForPath(path string, deviceID string) (string, error)
 }
 

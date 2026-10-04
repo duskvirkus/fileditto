@@ -1,3 +1,4 @@
+// Migration logic is in this file; see db.go for types and interfaces.
 package db
 
 import (
